@@ -1,7 +1,12 @@
 #!/bin/bash
-# TCP 智能網絡參數調優腳本（含 speedtest、自動安裝、支援小數 CPU/內存）
+# TCP 智能網絡參數調優腳本（BDP 版本）
+# 只修改：
+#   net.core.rmem_max
+#   net.core.wmem_max
+#   net.ipv4.tcp_rmem（中間值 & 最大值）
+#   net.ipv4.tcp_wmem（中間值 & 最大值）
 
-echo "====== TCP 智能網絡參數調優腳本 ======"
+echo "====== TCP 智能網絡參數調優腳本（BDP 模式） ======"
 echo "支援：CentOS / Debian / Ubuntu"
 echo
 
@@ -24,13 +29,19 @@ is_number() {
   echo "$1" | grep -Eq '^[0-9]+(\.[0-9]+)?$'
 }
 
-# 嘗試解析 JSON 輸出中的 bandwidth（bps）
+# 從 JSON 中解析 bandwidth（bytes/s）
 parse_json_bandwidth() {
-  local json="$1" key="$2"  # key="download" 或 "upload"
-  echo "$json" | sed -n "s/.*\"$key\"[^{]*{[^}]*\"bandwidth\":\([0-9][0-9]*\).*/\1/p" | head -n1
+  local json="$1" key="$2"
+  echo "$json" | sed -n "s/.*\"$key\"[^{]*{[^}]*\"bandwidth\":[ ]*\([0-9][0-9]*\).*/\1/p" | head -n1
 }
 
-# 從 speedtest output 解析 Mbps（文字模式）
+# 從 JSON 中解析 ping latency（ms）
+parse_json_latency() {
+  local json="$1"
+  echo "$json" | sed -n 's/.*"ping"[^{]*{[^}]*"latency":[ ]*\([0-9.][0-9.]*\).*/\1/p' | head -n1
+}
+
+# 從文字輸出解析某行 Mbps
 parse_text_mbps() {
   local text="$1" pattern="$2"
   local line value unit
@@ -51,66 +62,30 @@ parse_text_mbps() {
   return 0
 }
 
-# 執行 speedtest 並把帶寬存到全局變數 BW_Mbps
-run_speedtest_and_get_bw() {
-  BW_Mbps=""
-  local OUTPUT JSON DL_BPS UP_BPS DL_Mbps UP_Mbps
-
-  echo
-  echo "正在使用 speedtest 測速，可能需要 30~60 秒..."
-
-  # 先嘗試 JSON 格式（新版 speedtest by Ookla 推薦）
-  OUTPUT=$(speedtest --accept-license --accept-gdpr -f json 2>/dev/null)
-  if echo "$OUTPUT" | grep -q '"download"'; then
-    DL_BPS=$(parse_json_bandwidth "$OUTPUT" "download")
-    UP_BPS=$(parse_json_bandwidth "$OUTPUT" "upload")
-    if [ -n "$DL_BPS" ]; then
-      DL_Mbps=$(awk -v b="$DL_BPS" 'BEGIN{printf "%.2f", b*8/1000000}')
-    fi
-    if [ -n "$UP_BPS" ]; then
-      UP_Mbps=$(awk -v b="$UP_BPS" 'BEGIN{printf "%.2f", b*8/1000000}')
-    fi
-  else
-    # JSON 失敗就退回純文字模式
-    OUTPUT=$(speedtest --accept-license --accept-gdpr 2>/dev/null || speedtest 2>/dev/null)
-    DL_Mbps=$(parse_text_mbps "$OUTPUT" "Download")
-    UP_Mbps=$(parse_text_mbps "$OUTPUT" "Upload")
-  fi
-
-  if [ -n "$DL_Mbps" ] && [ -n "$UP_Mbps" ]; then
-    BW_Mbps=$(awk -v d="$DL_Mbps" -v u="$UP_Mbps" 'BEGIN{if (d<u) printf "%.2f", d; else printf "%.2f", u}')
-    echo "speedtest 測試結果：Download=${DL_Mbps} Mbps, Upload=${UP_Mbps} Mbps"
-    echo "採用上下行較小值作為帶寬：${BW_Mbps} Mbps"
-    return 0
-  elif [ -n "$DL_Mbps" ]; then
-    BW_Mbps="$DL_Mbps"
-    echo "只解析到 Download=${DL_Mbps} Mbps，採用此值作為帶寬。"
-    return 0
-  elif [ -n "$UP_Mbps" ]; then
-    BW_Mbps="$UP_Mbps"
-    echo "只解析到 Upload=${UP_Mbps} Mbps，採用此值作為帶寬。"
-    return 0
-  else
-    echo "自動測速輸出解析失敗。"
-    return 1
-  fi
+# 從文字輸出解析 Latency（ms）
+parse_text_latency() {
+  local text="$1"
+  echo "$text" | awk '/Latency:/ {
+    for(i=1;i<=NF;i++){
+      if($i ~ /^[0-9.]+$/){print $i; exit}
+    }
+  }'
 }
 
-# 自動安裝 speedtest（需 apt 或 yum）
+# 自動安裝 speedtest（若未安裝）
 install_speedtest_interactive() {
   if command -v speedtest >/dev/null 2>&1; then
     return 0
   fi
 
   echo "未檢測到 speedtest。"
-  read -p "是否自動安裝 speedtest？[Y/n]: " ins
-  if [[ "$ins" =~ ^[Nn]$ ]]; then
+  read -p "是否自動安裝 speedtest（Ookla 官方版）？[Y/n]: " ans
+  if [[ "$ans" =~ ^[Nn]$ ]]; then
     echo "你選擇不安裝 speedtest。"
     return 1
   fi
 
-  echo "開始嘗試自動安裝 speedtest（需要網路）..."
-
+  echo "開始嘗試自動安裝 speedtest（需網路）..."
   if command -v apt-get >/dev/null 2>&1; then
     apt-get update -y
     apt-get install -y curl
@@ -121,7 +96,7 @@ install_speedtest_interactive() {
     curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.rpm.sh | bash
     yum install -y speedtest || true
   else
-    echo "未檢測到 apt 或 yum，無法自動安裝 speedtest，請手動安裝。"
+    echo "未找到 apt 或 yum，無法自動安裝 speedtest，請自行安裝。"
     return 1
   fi
 
@@ -132,6 +107,65 @@ install_speedtest_interactive() {
     echo "speedtest 安裝似乎失敗，請手動檢查。"
     return 1
   fi
+}
+
+# 使用 speedtest 測速，得到：
+# 全局變數：BW_Mbps（上下行最大值）、RTT_MS（延遲毫秒）
+run_speedtest_and_get_bw_rtt() {
+  BW_Mbps=""
+  RTT_MS=""
+
+  echo
+  echo "正在使用 speedtest 測試帶寬與延遲，可能需要 30~60 秒..."
+  local OUTPUT DL_BPS UP_BPS DL_Mbps UP_Mbps
+
+  # 先試 JSON
+  OUTPUT=$(speedtest --accept-license --accept-gdpr -f json 2>/dev/null)
+  if echo "$OUTPUT" | grep -q '"download"'; then
+    DL_BPS=$(parse_json_bandwidth "$OUTPUT" "download")
+    UP_BPS=$(parse_json_bandwidth "$OUTPUT" "upload")
+    RTT_MS=$(parse_json_latency "$OUTPUT")
+
+    if [ -n "$DL_BPS" ]; then
+      DL_Mbps=$(awk -v b="$DL_BPS" 'BEGIN{printf "%.2f", b/125000}')  # Bps -> Mbps
+    fi
+    if [ -n "$UP_BPS" ]; then
+      UP_Mbps=$(awk -v b="$UP_BPS" 'BEGIN{printf "%.2f", b/125000}')
+    fi
+  else
+    # JSON 失敗就用人類可讀模式
+    OUTPUT=$(speedtest --accept-license --accept-gdpr 2>/dev/null || speedtest 2>/dev/null)
+    DL_Mbps=$(parse_text_mbps "$OUTPUT" "Download")
+    UP_Mbps=$(parse_text_mbps "$OUTPUT" "Upload")
+    RTT_MS=$(parse_text_latency "$OUTPUT")
+  fi
+
+  if [ -n "$DL_Mbps" ] || [ -n "$UP_Mbps" ]; then
+    echo "speedtest 測試結果："
+    [ -n "$DL_Mbps" ] && echo "  Download = ${DL_Mbps} Mbps"
+    [ -n "$UP_Mbps" ] && echo "  Upload   = ${UP_Mbps} Mbps"
+  fi
+
+  # 選上下行中的「最大值」作為帶寬
+  if [ -n "$DL_Mbps" ] && [ -n "$UP_Mbps" ]; then
+    BW_Mbps=$(awk -v d="$DL_Mbps" -v u="$UP_Mbps" 'BEGIN{if (d>u) printf "%.2f", d; else printf "%.2f", u}')
+    echo "採用 Download/Upload 中的較大值作為帶寬：${BW_Mbps} Mbps"
+  elif [ -n "$DL_Mbps" ]; then
+    BW_Mbps="$DL_Mbps"
+    echo "僅取得 Download，帶寬採用：${BW_Mbps} Mbps"
+  elif [ -n "$UP_Mbps" ]; then
+    BW_Mbps="$UP_Mbps"
+    echo "僅取得 Upload，帶寬採用：${BW_Mbps} Mbps"
+  else
+    echo "無法從 speedtest 輸出中解析帶寬。"
+    return 1
+  fi
+
+  if [ -n "$RTT_MS" ]; then
+    echo "測得延遲 RTT：約 ${RTT_MS} ms"
+  fi
+
+  return 0
 }
 
 # ========== 交互輸入 CPU / 內存 ==========
@@ -156,22 +190,22 @@ echo
 echo "當前 VPS 配置：${CPU}C / ${RAM}G"
 echo
 
-# ========== 是否使用 speedtest 自動測速 ==========
+# ========== 是否使用 speedtest ==========
 BW_Mbps=""
+RTT_MS=""
 
-read -p "是否使用 speedtest 自動測速獲取帶寬？[Y/n]: " use_st
+read -p "是否使用 speedtest 自動測速獲取帶寬與 RTT？[Y/n]: " use_st
 if [[ ! "$use_st" =~ ^[Nn]$ ]]; then
-  # 需要 speedtest
   if install_speedtest_interactive; then
-    if ! run_speedtest_and_get_bw; then
-      echo "自動測速失敗，將改為手動輸入帶寬。"
+    if ! run_speedtest_and_get_bw_rtt; then
+      echo "自動測速失敗，將改為手動輸入帶寬與 RTT。"
     fi
   else
-    echo "未安裝 speedtest，將改為手動輸入帶寬。"
+    echo "未安裝 speedtest，將改為手動輸入帶寬與 RTT。"
   fi
 fi
 
-# 如果自動測速沒成功，改為手動輸入帶寬
+# 若沒有 speedtest 或解析失敗 -> 手動輸入
 if [ -z "$BW_Mbps" ]; then
   echo
   read -p "請輸入實際可用帶寬 (Mbps，例如 100、500、2000): " BW_Mbps
@@ -186,47 +220,75 @@ if [ "$(echo "$BW_Mbps <= 0" | bc)" -eq 1 ]; then
   exit 1
 fi
 
+# RTT 若未從 speedtest 取得，則讓使用者輸入
+if [ -z "$RTT_MS" ]; then
+  echo
+  read -p "請輸入 RTT 延遲 (毫秒)，例如 50（直接 Enter 使用 100ms 默認）: " RTT_IN
+  if [ -z "$RTT_IN" ]; then
+    RTT_MS=100
+  else
+    if ! is_number "$RTT_IN"; then
+      echo "RTT 必須是數字（可小數）。"
+      exit 1
+    fi
+    if [ "$(echo "$RTT_IN <= 0" | bc)" -eq 1 ]; then
+      echo "RTT 必須大於 0。"
+      exit 1
+    fi
+    RTT_MS="$RTT_IN"
+  fi
+fi
+
 echo
-echo "最終帶寬將按：${BW_Mbps} Mbps 進行計算。"
+echo "最終用於計算的參數："
+echo "  CPU    = ${CPU} C"
+echo "  記憶體 = ${RAM} G"
+echo "  帶寬   = ${BW_Mbps} Mbps"
+echo "  RTT    = ${RTT_MS} ms"
 echo
 
-# ========== 根據你的規則計算四個參數 ==========
-# 基準：2C / 2000Mbps → 65536 / 10000000
+# ========== 計算默認值 & BDP 最大值 ==========
+# 默認值邏輯不變：
+#   2C → 65536
+#   4C → 131072
 DEFAULT_BASE=65536
-MAX_BASE=10000000
-CPU_BASE=2
-BW_BASE=2000
-
-CPU_FACTOR=$(echo "$CPU / $CPU_BASE" | bc -l)
-BW_FACTOR=$(echo "$BW_Mbps / $BW_BASE" | bc -l)
-
-NEW_DEFAULT=$(printf "%.0f" "$(echo "$DEFAULT_BASE * $CPU_FACTOR" | bc)")
-NEW_MAX=$(printf "%.0f" "$(echo "$MAX_BASE * $BW_FACTOR" | bc)")
-
-# 保底：不要低於原始基準
+CPU_FACTOR=$(echo "$CPU / 2" | bc -l)
+NEW_DEFAULT_FLOAT=$(echo "$DEFAULT_BASE * $CPU_FACTOR" | bc)
+NEW_DEFAULT=$(printf "%.0f" "$NEW_DEFAULT_FLOAT")
+# 不低於基準 65536
 if [ "$NEW_DEFAULT" -lt "$DEFAULT_BASE" ]; then
   NEW_DEFAULT=$DEFAULT_BASE
 fi
-if [ "$NEW_MAX" -lt "$MAX_BASE" ]; then
-  NEW_MAX=$MAX_BASE
+
+# 最大值使用 BDP 公式：
+#   BDP_bytes = 頻寬(bit/s) * RTT(s) / 8
+#   帶寬(Mbps) → bit/s = BW_Mbps * 1e6
+#   化簡後：BDP_bytes = BW_Mbps * 125 * RTT_ms
+BDP_BYTES=$(awk -v bw="$BW_Mbps" -v rtt="$RTT_MS" 'BEGIN{printf "%.0f", bw*125*rtt}')
+NEW_MAX="$BDP_BYTES"
+
+# 確保最大值 >= 默認值
+if [ "$NEW_MAX" -lt "$NEW_DEFAULT" ]; then
+  NEW_MAX="$NEW_DEFAULT"
 fi
 
-echo "計算得到："
+echo "計算結果："
 echo "  默認值(default) = $NEW_DEFAULT"
-echo "  最大值(max)     = $NEW_MAX"
+echo "  最大值(BDP_max) = $NEW_MAX"
 echo
 
 SYSCTL_FILE="/etc/sysctl.conf"
 BACKUP_FILE="/etc/sysctl.conf.bak_$(date +%F_%H%M%S)"
 
+[ -f "$SYSCTL_FILE" ] || touch "$SYSCTL_FILE"
 cp "$SYSCTL_FILE" "$BACKUP_FILE"
 echo "已備份原配置到：$BACKUP_FILE"
 echo
 
-# 刪掉舊的自動生成區塊
+# 移除舊的自動生成區塊（若有）
 sed -i '/# ===== BageVM TCP 智能調優 START =====/,/# ===== BageVM TCP 智能調優 END =====/d' "$SYSCTL_FILE"
 
-# 追加你的模板 + 計算後四個值
+# 追加你的模板 + 新計算的四個值
 cat >> "$SYSCTL_FILE" <<EOF
 
 # ===== BageVM TCP 智能調優 START =====
@@ -247,21 +309,7 @@ net.ipv4.tcp_moderate_rcvbuf=1
 # net.ipv4.tcp_rmem
 # net.ipv4.tcp_wmem
 # 计算公式 带宽 * 字节数 * RTT延迟 / 8 = BDP_Max
-# 计算出的最大值填入 net.core.rmem_max net.core.wmem_max 这两个最大值需要一致，只需要用speedtest_cli测试出来的值套用计算公式计算出来即可，测试出来的值进行四舍五入计算后再套用公式进行计算
-# 计算出来的最大值需要填写 net.ipv4.tcp_rmem net.ipv4.tcp_wmem 最后一个值里去
-# 参数值释义
-# net.core.rmem_max 下行带宽
-# net.core.wmem_max 上行带宽
-# net.ipv4.tcp_rmem ipv4下行带宽参数
-# net.ipv4.tcp_wmem ipv4上行带宽参数
-# net.ipv4.tcp_rmem=4096 524288 30000000 这三个值默认排序是，最小值、默认值、最大值，一般只需要调默认值和最大值，最小值不做更改
-# Speedtest_cli 安装命令
-# apt install sudo -y && curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash && apt-get install speedtest && speedtest -y
-# Speedtest_cli 常用命令
-# speedtest -L 查看最近VPS测速点
-# speedtest -s 测速点id
-# speedtest 不加任何参数，直接进行测速 （不推荐，默认测速点不一定是距离服务器最近的）
-
+# 本脚本中：BDP_Max = 带宽(Mbps) * 125 * RTT(ms)
 net.core.rmem_max=$NEW_MAX
 net.core.wmem_max=$NEW_MAX
 net.ipv4.tcp_rmem=4096 $NEW_DEFAULT $NEW_MAX
@@ -275,7 +323,6 @@ net.ipv4.conf.default.forwarding=1
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
 # ===== BageVM TCP 智能調優 END =====
-
 EOF
 
 echo "已寫入新配置到 $SYSCTL_FILE，正在套用 (sysctl -p)..."
