@@ -5,11 +5,7 @@
 使用方法：
 
 ---
-	git clone https://github.com/kexue-aihao/TCP-Optimization.git
----	
-	chmod +x generate_sysctl_config.sh
----
-	./generate_sysctl_config.sh <单线程期望峰值> <CPU核心数量> <内存>
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/tcpv3.sh && bash tcpv3.sh
 ---	
 
 ## TCP Optimization Script Usage Documentation
@@ -17,11 +13,8 @@
 Instructions:
 
 ---
-	git clone https://github.com/kexue-aihao/TCP-Optimization.git
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/tcpv3.sh && bash tcpv3.sh
 ---
-	chmod +x generate_sysctl_config.sh
----
-	./generate_sysctl_config.sh <single-thread expected peak performance> <number of CPU cores> <memory>
 
 
 ## 使用注意事项：
