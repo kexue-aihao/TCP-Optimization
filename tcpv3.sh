@@ -1,145 +1,257 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 echo "====== TCP 智能網絡參數調優腳本 ======"
 echo "支援：CentOS / Debian / Ubuntu"
+echo "注意：請使用 root 或 sudo 執行本腳本"
 echo ""
 
-if [ "$(id -u)" -ne 0 ]; then
-  echo "請以 root 身份執行本腳本。"
-  exit 1
+# 必須 root
+if [ "$EUID" -ne 0 ]; then
+    echo "請使用 root 權限運行，例如：sudo bash $0"
+    exit 1
 fi
 
+# 檢測系統
+OS="unknown"
+if [ -f /etc/redhat-release ]; then
+    OS="centos"
+elif [ -f /etc/os-release ]; then
+    . /etc/os-release
+    case "$ID" in
+        ubuntu) OS="ubuntu" ;;
+        debian) OS="debian" ;;
+        centos|rhel|rocky|almalinux) OS="centos" ;;
+        *) OS="$ID" ;;
+    esac
+fi
+
+echo "檢測到系統：$OS"
+echo ""
+
+# 確保有 bc（做浮點運算用）
 if ! command -v bc >/dev/null 2>&1; then
-  echo "未找到 bc，請先安裝："
-  echo "  Debian/Ubuntu: apt install bc"
-  echo "  CentOS/RHEL:  yum install bc"
-  exit 1
-fi
-
-echo "請按提示輸入 VPS 硬體配置："
-read -p "請輸入 CPU 核心數 (例如 2 或 1.5): " CPU
-read -p "請輸入 記憶體大小 (GB) (例如 2 或 0.5): " MEM
-
-# 允許 CPU / 記憶體 為小數，例如 1.5C、0.5G
-if ! [[ "$CPU" =~ ^[0-9]+(\.[0-9]+)?$ ]] || ! [[ "$MEM" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-  echo "輸入錯誤：CPU / 記憶體 必須是數字（可為小數，例如 1、2.5、0.5）。"
-  exit 1
-fi
-
-cpu_gt_zero=$(echo "$CPU > 0" | bc)
-mem_gt_zero=$(echo "$MEM > 0" | bc)
-if [ "$cpu_gt_zero" -ne 1 ] || [ "$mem_gt_zero" -ne 1 ]; then
-  echo "輸入錯誤：CPU / 記憶體 必須都大於 0。"
-  exit 1
-fi
-
-BW=""
-
-# 優先嘗試使用 speedtest 自動測速獲取帶寬
-if command -v speedtest >/dev/null 2>&1; then
-  echo ""
-  read -p "檢測到 speedtest，可自動測速獲取帶寬，是否立即測試？[Y/n]: " USE_ST
-  if [ -z "$USE_ST" ] || [[ "$USE_ST" =~ ^[Yy]$ ]]; then
-    echo "正在執行 speedtest 測速，這可能需要一段時間..."
-    ST_OUTPUT=$(speedtest 2>/dev/null)
-
-    DOWN=$(echo "$ST_OUTPUT" | awk '/Download:/ {print $2; exit}')
-    UP=$(echo "$ST_OUTPUT" | awk '/Upload:/ {print $2; exit}')
-    LAT=$(echo "$ST_OUTPUT" | awk '/Latency:/ {print $2; exit}')
-
-    if [ -n "$DOWN" ] && [ -n "$UP" ]; then
-      echo "speedtest 測試結果："
-      echo "  Download: ${DOWN} Mbps"
-      echo "  Upload  : ${UP} Mbps"
-      [ -n "$LAT" ] && echo "  Latency : ${LAT} ms"
-
-      # 取上下行較小值作為實際可用帶寬
-      BW_MEASURED=$(echo "$DOWN $UP" | awk '{d=$1; u=$2; if(d<u) print d; else print u}')
-      echo "將使用上下行中較小值作為帶寬：${BW_MEASURED} Mbps"
-      read -p "是否接受該帶寬數值？[Y/n]: " USE_BW
-      if [ -z "$USE_BW" ] || [[ "$USE_BW" =~ ^[Yy]$ ]]; then
-        BW="$BW_MEASURED"
-      else
-        echo "你選擇手動輸入帶寬。"
-      fi
+    echo "未找到 bc，正在嘗試安裝..."
+    if [ "$OS" = "centos" ]; then
+        yum install -y bc || { echo "安裝 bc 失敗，請手動安裝後重試。"; exit 1; }
+    elif [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
+        apt-get update && apt-get install -y bc || { echo "安裝 bc 失敗，請手動安裝後重試。"; exit 1; }
     else
-      echo "speedtest 測試結果解析失敗，將改為手動輸入帶寬。"
+        echo "無法自動安裝 bc，請手動安裝後重試。"
+        exit 1
     fi
-  fi
-else
-  echo ""
-  echo "未檢測到 speedtest，可按模板中的命令安裝後再使用自動測速。"
 fi
 
-# 若未從 speedtest 取得帶寬，改為手動輸入
+# 判斷是否為正數（可帶小數）
+is_number() {
+    echo "$1" | grep -Eq '^[0-9]+([.][0-9]+)?$'
+}
+
+# 尋找 speedtest 命令
+find_speedtest_cmd() {
+    if command -v speedtest >/dev/null 2>&1; then
+        echo "speedtest"
+    elif command -v speedtest-cli >/dev/null 2>&1; then
+        echo "speedtest-cli"
+    else
+        echo ""
+    fi
+}
+
+# 交互式安裝 speedtest
+install_speedtest() {
+    local cmd
+    cmd=$(find_speedtest_cmd)
+    if [ -n "$cmd" ]; then
+        return 0
+    fi
+
+    echo "未檢測到 speedtest / speedtest-cli。"
+    read -p "是否自動為你安裝 speedtest？(y/N): " INSTALL
+    if [[ ! "$INSTALL" =~ ^[Yy]$ ]]; then
+        echo "你選擇不自動安裝 speedtest。"
+        return 1
+    fi
+
+    echo "正在嘗試自動安裝 speedtest..."
+
+    if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
+        apt-get update
+        apt-get install -y curl
+        curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | bash
+        apt-get install -y speedtest || true
+    elif [ "$OS" = "centos" ]; then
+        yum install -y curl
+        curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.rpm.sh | bash
+        yum install -y speedtest || true
+    else
+        echo "暫不支援此系統的一鍵安裝 speedtest，請參考官方文檔手動安裝。"
+        return 1
+    fi
+
+    cmd=$(find_speedtest_cmd)
+    if [ -z "$cmd" ]; then
+        echo "自動安裝 speedtest 似乎沒有成功，請手動安裝。"
+        return 1
+    fi
+
+    echo "已成功安裝 speedtest 命令：$cmd"
+    return 0
+}
+
+# 使用 speedtest 測試帶寬
+auto_detect_bw() {
+    local ST_CMD
+    ST_CMD=$(find_speedtest_cmd)
+
+    if [ -z "$ST_CMD" ]; then
+        install_speedtest || return 1
+        ST_CMD=$(find_speedtest_cmd)
+        if [ -z "$ST_CMD" ]; then
+            return 1
+        fi
+    fi
+
+    echo ""
+    echo "正在使用 $ST_CMD 測試帶寬，這可能需要一段時間..."
+    local OUTPUT
+    if [ "$(basename "$ST_CMD")" = "speedtest" ]; then
+        OUTPUT=$($ST_CMD -y 2>/dev/null)
+    else
+        OUTPUT=$($ST_CMD 2>/dev/null)
+    fi
+
+    if [ -z "$OUTPUT" ]; then
+        echo "speedtest 輸出為空，測速失敗。"
+        return 1
+    fi
+
+    local DL_LINE DL_VALUE
+    DL_LINE=$(echo "$OUTPUT" | grep -i "Download" | head -n1)
+    if [ -z "$DL_LINE" ]; then
+        echo "無法從 speedtest 輸出中找到 Download 行。"
+        return 1
+    fi
+
+    DL_VALUE=$(echo "$DL_LINE" | awk '{
+        for(i=1;i<=NF;i++){
+            if($i ~ /^[0-9.]+$/){print $i; exit}
+        }
+    }')
+
+    if [ -z "$DL_VALUE" ]; then
+        echo "無法解析下載帶寬數值。"
+        return 1
+    fi
+
+    # 四捨五入到整數 Mbps
+    BW_INT=$(awk -v v="$DL_VALUE" 'BEGIN{printf "%d", v+0.5}')
+    if [ "$BW_INT" -le 0 ]; then
+        echo "解析出的帶寬數值非法：$BW_INT"
+        return 1
+    fi
+
+    echo "speedtest 測得下行帶寬約為：${BW_INT} Mbps"
+    BW="$BW_INT"
+    return 0
+}
+
+# ====== 讀取硬體配置（CPU / 內存支援小數） ======
+echo "請按提示輸入 VPS 硬體配置："
+read -p "請輸入 CPU 核心數 (例如 1 或 2 或 1.5): " CPU
+read -p "請輸入 記憶體大小 (GB) (例如 0.5 或 2): " RAM
+
+if ! is_number "$CPU" || ! is_number "$RAM"; then
+    echo "輸入錯誤：CPU / 記憶體 必須是數字（可以是整數或小數，例如 1、2、0.5）。"
+    exit 1
+fi
+
+if [ "$(echo "$CPU <= 0" | bc)" -eq 1 ] || [ "$(echo "$RAM <= 0" | bc)" -eq 1 ]; then
+    echo "輸入錯誤：CPU / 記憶體 必須大於 0。"
+    exit 1
+fi
+
+echo ""
+read -p "是否使用 speedtest 自動測速獲取帶寬？(y/N): " USE_AUTO
+
+BW=""   # 之後會存成「整數 Mbps」
+
+if [[ "$USE_AUTO" =~ ^[Yy]$ ]]; then
+    if ! auto_detect_bw; then
+        echo ""
+        echo "自動測速失敗，或你拒絕安裝 speedtest。"
+        echo "改為手動輸入帶寬模式。"
+    fi
+fi
+
+# 手動輸入帶寬（自動測速沒成功 或 選 N）
 if [ -z "$BW" ]; then
-  read -p "請輸入實際可用帶寬 (Mbps，例如 2000 或 150.5): " BW
+    echo ""
+    read -p "請輸入實際可用帶寬 (Mbps，例如 2000 或 150.5): " BW_INPUT
+    if ! is_number "$BW_INPUT"; then
+        echo "輸入錯誤：帶寬必須是數字（可以是整數或小數）。"
+        exit 1
+    fi
+    BW=$(awk -v v="$BW_INPUT" 'BEGIN{printf "%d", v+0.5}')
+    if [ "$BW" -le 0 ]; then
+        echo "輸入錯誤：帶寬必須大於 0。"
+        exit 1
+    fi
 fi
 
-# 檢查帶寬為數字（可帶小數）
-if ! [[ "$BW" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-  echo "輸入錯誤：帶寬必須是數字（可帶小數，例如 100、2000.5）。"
-  exit 1
-fi
+echo ""
+echo "最終將使用以下輸入參數："
+echo "  CPU    = ${CPU} C"
+echo "  記憶體 = ${RAM} G"
+echo "  帶寬   = ${BW} Mbps"
+echo ""
 
+# ====== 計算緩衝區大小 ======
 # 基準：2C 2G 2000Mbps → 默認值 65536，最大值 10000000
-DEFAULT_BASE=65536     # net.ipv4.tcp_[rw]mem 中的默認值（中間那個）
-MAX_BASE=10000000      # net.core.[rw]mem_max 和 tcp_[rw]mem 的最大值（最後那個）
+DEFAULT_BASE=65536
+MAX_BASE=10000000
 
-# 按你給的邏輯：
-#   默認值 隨 CPU 核心數線性放大：CPU=4C → 65536 * (4/2) = 131072
-#   最大值 隨帶寬線性放大：BW=4000Mbps → 10000000 * (4000/2000) = 20000000
-cpu_factor=$(echo "$CPU / 2" | bc -l)
-bw_factor=$(echo "$BW / 2000" | bc -l)
+CPU_FACTOR=$(echo "scale=4; $CPU / 2" | bc)
+RAM_FACTOR=$(echo "scale=4; $RAM / 2" | bc)
+DEFAULT_FACTOR=$(echo "scale=4; ($CPU_FACTOR + $RAM_FACTOR) / 2" | bc)
+BW_FACTOR=$(echo "scale=4; $BW / 2000" | bc)
 
-NEW_DEFAULT=$(printf "%.0f" "$(echo "$DEFAULT_BASE * $cpu_factor" | bc)")
-NEW_MAX=$(printf "%.0f" "$(echo "$MAX_BASE * $bw_factor" | bc)")
+NEW_DEFAULT_FLOAT=$(echo "scale=4; $DEFAULT_BASE * $DEFAULT_FACTOR" | bc)
+NEW_MAX_FLOAT=$(echo "scale=4; $MAX_BASE * $BW_FACTOR" | bc)
 
-# 防止過小，至少不低於基準值
-if [ "$NEW_DEFAULT" -lt "$DEFAULT_BASE" ]; then
-  NEW_DEFAULT=$DEFAULT_BASE
+NEW_DEFAULT=$(printf "%.0f" "$NEW_DEFAULT_FLOAT")
+NEW_MAX=$(printf "%.0f" "$NEW_MAX_FLOAT")
+
+# 保證不低於最小值 4096，且最大值不小於默認值
+if [ "$NEW_DEFAULT" -lt 4096 ]; then
+    NEW_DEFAULT=4096
 fi
-if [ "$NEW_MAX" -lt "$MAX_BASE" ]; then
-  NEW_MAX=$MAX_BASE
+if [ "$NEW_MAX" -lt "$NEW_DEFAULT" ]; then
+    NEW_MAX="$NEW_DEFAULT"
 fi
 
-echo ""
-echo "根據輸入硬體與帶寬計算出的參數："
-echo "  CPU        : ${CPU}C"
-echo "  記憶體     : ${MEM}G"
-echo "  帶寬       : ${BW} Mbps"
-echo "  默認值     : ${NEW_DEFAULT}"
-echo "  最大值     : ${NEW_MAX}"
-echo ""
-echo "將會修改以下四個 sysctl 參數（其他模板參數原封不動寫入）："
-echo "  net.core.rmem_max = ${NEW_MAX}"
-echo "  net.core.wmem_max = ${NEW_MAX}"
-echo "  net.ipv4.tcp_rmem = 4096 ${NEW_DEFAULT} ${NEW_MAX}"
-echo "  net.ipv4.tcp_wmem = 4096 ${NEW_DEFAULT} ${NEW_MAX}"
+echo "==== 計算結果預覽 ===="
+echo "net.core.rmem_max = $NEW_MAX"
+echo "net.core.wmem_max = $NEW_MAX"
+echo "net.ipv4.tcp_rmem = 4096 $NEW_DEFAULT $NEW_MAX"
+echo "net.ipv4.tcp_wmem = 4096 $NEW_DEFAULT $NEW_MAX"
 echo ""
 
-read -p "確認寫入 /etc/sysctl.conf 並立即生效？[y/N]: " CONFIRM
-case "$CONFIRM" in
-  [yY]|[yY][eE][sS])
-    ;;
-  *)
-    echo "已取消，不做任何修改。"
+read -p "是否將以上參數寫入 /etc/sysctl.conf 並立即生效？[y/N]: " CONFIRM
+if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+    echo "已取消，不會修改系統配置。"
     exit 0
-    ;;
-esac
+fi
 
 SYSCTL_FILE="/etc/sysctl.conf"
-BACKUP_FILE="/etc/sysctl.conf.bak-$(date +%Y%m%d-%H%M%S)"
+BACKUP_FILE="/etc/sysctl.conf.bak_$(date +%Y%m%d_%H%M%S)"
 
-if [ -f "$SYSCTL_FILE" ]; then
-  cp "$SYSCTL_FILE" "$BACKUP_FILE"
-  echo "已備份原檔案為: $BACKUP_FILE"
-fi
+cp "$SYSCTL_FILE" "$BACKUP_FILE"
+echo "已備份原始配置到: $BACKUP_FILE"
+echo ""
 
 cat >> "$SYSCTL_FILE" <<EOF
 
-# ======= TCP 智能優化腳本自動生成 (開始) =======
-# 本TCP网络参数模板取自BageVM默认参数模板进行修改
+################## BageVM TCP 優化模板（智能腳本生成） ##################
 fs.file-max = 6815744
 net.ipv4.tcp_no_metrics_save=1
 net.ipv4.tcp_ecn=0
@@ -172,10 +284,10 @@ net.ipv4.tcp_moderate_rcvbuf=1
 # speedtest -s 测速点id
 # speedtest 不加任何参数，直接进行测速 （不推荐，默认测速点不一定是距离服务器最近的）
 # 本TCP网络参数模板取自BageVM默认参数模板进行修改
-net.core.rmem_max=${NEW_MAX}
-net.core.wmem_max=${NEW_MAX}
-net.ipv4.tcp_rmem=4096  ${NEW_DEFAULT} ${NEW_MAX}
-net.ipv4.tcp_wmem=4096 ${NEW_DEFAULT} ${NEW_MAX}
+net.core.rmem_max=$NEW_MAX
+net.core.wmem_max=$NEW_MAX
+net.ipv4.tcp_rmem=4096 $NEW_DEFAULT $NEW_MAX
+net.ipv4.tcp_wmem=4096 $NEW_DEFAULT $NEW_MAX
 net.ipv4.udp_rmem_min=8192
 net.ipv4.udp_wmem_min=8192
 net.ipv4.ip_forward=1
@@ -184,13 +296,18 @@ net.ipv4.conf.all.forwarding=1
 net.ipv4.conf.default.forwarding=1
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
-# ======= TCP 智能優化腳本自動生成 (結束) =======
+################## BageVM TCP 優化模板（智能腳本生成結束） ##################
 EOF
 
+echo "已寫入 /etc/sysctl.conf，正在執行 sysctl -p 使配置生效..."
 echo ""
-echo "已寫入 /etc/sysctl.conf，正在應用配置 (sysctl -p)..."
-if sysctl -p; then
-  echo "TCP 網絡參數已成功應用。"
-else
-  echo "警告：sysctl -p 執行時出現錯誤，請檢查上述輸出與 $SYSCTL_FILE。"
-fi
+sysctl -p
+
+echo ""
+echo "====== TCP 智能網絡參數調優完成 ======"
+echo "當前生效的關鍵參數："
+echo "  net.core.rmem_max = $NEW_MAX"
+echo "  net.core.wmem_max = $NEW_MAX"
+echo "  net.ipv4.tcp_rmem = 4096 $NEW_DEFAULT $NEW_MAX"
+echo "  net.ipv4.tcp_wmem = 4096 $NEW_DEFAULT $NEW_MAX"
+echo "如需恢復，可使用備份檔案：$BACKUP_FILE"
