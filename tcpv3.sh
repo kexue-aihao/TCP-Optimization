@@ -17,16 +17,19 @@ if ! command -v bc >/dev/null 2>&1; then
 fi
 
 echo "請按提示輸入 VPS 硬體配置："
-read -p "請輸入 CPU 核心數 (例如 2): " CPU
-read -p "請輸入 記憶體大小 (GB) (例如 2): " MEM
+read -p "請輸入 CPU 核心數 (例如 2 或 1.5): " CPU
+read -p "請輸入 記憶體大小 (GB) (例如 2 或 0.5): " MEM
 
-if ! [[ "$CPU" =~ ^[0-9]+$ ]] || ! [[ "$MEM" =~ ^[0-9]+$ ]]; then
-  echo "輸入錯誤：CPU / 記憶體 必須是整數。"
+# 允許 CPU / 記憶體 為小數，例如 1.5C、0.5G
+if ! [[ "$CPU" =~ ^[0-9]+(\.[0-9]+)?$ ]] || ! [[ "$MEM" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "輸入錯誤：CPU / 記憶體 必須是數字（可為小數，例如 1、2.5、0.5）。"
   exit 1
 fi
 
-if [ "$CPU" -le 0 ] || [ "$MEM" -le 0 ]; then
-  echo "輸入錯誤：數值必須大於 0。"
+cpu_gt_zero=$(echo "$CPU > 0" | bc)
+mem_gt_zero=$(echo "$MEM > 0" | bc)
+if [ "$cpu_gt_zero" -ne 1 ] || [ "$mem_gt_zero" -ne 1 ]; then
+  echo "輸入錯誤：CPU / 記憶體 必須都大於 0。"
   exit 1
 fi
 
@@ -70,12 +73,12 @@ fi
 
 # 若未從 speedtest 取得帶寬，改為手動輸入
 if [ -z "$BW" ]; then
-  read -p "請輸入實際可用帶寬 (Mbps，例如 2000): " BW
+  read -p "請輸入實際可用帶寬 (Mbps，例如 2000 或 150.5): " BW
 fi
 
 # 檢查帶寬為數字（可帶小數）
 if ! [[ "$BW" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-  echo "輸入錯誤：帶寬必須是數字（可帶小數）。"
+  echo "輸入錯誤：帶寬必須是數字（可帶小數，例如 100、2000.5）。"
   exit 1
 fi
 
