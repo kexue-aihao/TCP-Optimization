@@ -1,34 +1,17 @@
-# TCP-Optimization
----
-## TCP 优化脚本使用文档
-
-使用方法：
+# TCP优化参数实例存储
 
 ---
-	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/tcpv3.sh && bash tcpv3.sh
----	
 
-## TCP Optimization Script Usage Documentation
+## 参数文件命名规范及其注意事项
 
-Instructions:
+- 机器硬件参数配置+VPS区域+带宽+VPS厂商+机器产品实例名称
+
+- 仓库的TCP参数可以拿去直接用，也可以复制下来，自行修改，然后再应用
+
+- 本仓库存储的参数，皆为实测过没有使用问题的参数，尽可能保证速度优先的情况下，保证抖动不高
 
 ---
-	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/tcpv3.sh && bash tcpv3.sh
+
+## 其他VPS厂商的机器如果有需要补充参数可以提交PR合并
+
 ---
-
-
-## 使用注意事项：
-	
-### 1.使用前务必备份系统数据，不保证跨系统兼容性
-
-### 2.不建议太小配置的机器使用该脚本
-
-### 3.脚本最低运行配置，1核心1G运行内存
-
-## Usage Notes:
-
-### 1. Be sure to back up your system data before use. Cross-system compatibility is not guaranteed.
-
-### 2. This script is not recommended for machines with undersized configurations.
-
-### 3. The script requires a single core and 1GB of RAM.
