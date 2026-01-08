@@ -362,7 +362,7 @@ main() {
     fi
     
     # 第一部分：SSH配置
-    log_info "[1/6] 配置SSH..."
+    log_info "[1/7] 配置SSH..."
     if configure_ssh; then
         log_info "SSH配置成功"
     else
@@ -371,7 +371,7 @@ main() {
     
     # 第二部分：BBR安装
     if [[ "$skip_bbr" == false ]]; then
-        log_info "[2/6] 安装BBR加速..."
+        log_info "[2/7] 安装BBR加速..."
         if install_bbr; then
             log_info "BBR安装成功"
         else
@@ -382,12 +382,12 @@ main() {
         log_info "等待系统稳定（5秒）..."
         sleep 5
     else
-        log_info "[2/6] BBR加速安装..."
+        log_info "[2/7] BBR加速安装..."
         log_info "已跳过BBR安装"
     fi
     
     # 第三部分：系统参数调优
-    log_info "[3/6] 配置系统参数..."
+    log_info "[3/7] 配置系统参数..."
     if configure_sysctl; then
         log_info "系统参数配置成功"
     else
@@ -395,14 +395,17 @@ main() {
     fi
     
     # 第四部分：安装nyanpass实例
-    log_info "[4/6] 安装nyanpass实例1 (awshk)..."
+    log_info "[4/7] 安装nyanpass实例1 (awshk)..."
     install_nyanpass 1 "awshk" "bcca5a9e-a28d-4870-be01-1d68ae32d632" "https://forwoq.0obbuzld1prxkdt9.lol" || true
     
-    log_info "[5/6] 安装nyanpass实例2 (jmyd)..."
+    log_info "[5/7] 安装nyanpass实例2 (jmyd)..."
     install_nyanpass 2 "jmyd" "a0a35822-4963-4a26-9dfe-b64082968794" "https://ny.1151119.xyz" || true
     
-    log_info "[6/6] 安装nyanpass实例3 (jmyd2)..."
+    log_info "[6/7] 安装nyanpass实例3 (jmyd2)..."
     install_nyanpass 3 "jmyd2" "23c77e98-8b12-4c49-aec3-492711714ee3" "https://bingzi.cc" || true
+    
+    log_info "[7/7] 安装nyanpass实例4 (gzyd)..."
+    install_nyanpass 4 "gzyd" "211da760-2f54-46fa-a453-9a15e25de4fe" "https://traffic.kinako.one" || true
     
     log_info "=========================================="
     log_info "所有安装任务完成！"
