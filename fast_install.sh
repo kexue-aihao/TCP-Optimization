@@ -19,25 +19,36 @@ echo "开始执行快速安装脚本"
 echo "=========================================="
 
 # 更新软件包列表
-echo "[1/3] 更新软件包列表..."
-apt update -qq || {
+echo "[1/5] 更新软件包列表..."
+apt update -qq >/dev/null 2>&1 || {
     echo "警告: apt update 失败，继续执行..."
 }
 
 # 升级系统
-echo "[2/3] 升级系统..."
-apt upgrade -y -qq || {
+echo "[2/5] 升级系统..."
+apt upgrade -y -qq >/dev/null 2>&1 || {
     echo "警告: apt upgrade 失败，继续执行..."
 }
 
-# 安装软件包
-echo "[3/3] 安装常用软件..."
-apt install -y -qq sudo curl iperf3 mtr-tiny wget nano vim git iputils-ping dnsutils lsof net-tools jq whois nmap >/dev/null 2>&1 || true
+# 安装常用软件包
+echo "[3/5] 安装常用软件..."
+apt install -y -qq iperf3 ncdu iftop curl unzip wget ethtool mtr net-tools sudo >/dev/null 2>&1 || {
+    echo "警告: 部分软件包安装失败，继续执行..."
+}
 
 # 安装nexttrace
-echo "安装 nexttrace..."
-curl -fsSL http://nxtrace.org/nt | bash >/dev/null 2>&1 || {
-    echo "nexttrace 安装失败，跳过"
+echo "[4/5] 安装 nexttrace..."
+bash -c "$(curl -Ls https://raw.githubusercontent.com/xgadget-lab/nexttrace/main/nt_install.sh)" >/dev/null 2>&1 || {
+    echo "警告: nexttrace 安装失败，跳过"
+}
+
+# 安装speedtest
+echo "[5/5] 安装 speedtest..."
+curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | bash >/dev/null 2>&1 || {
+    echo "警告: speedtest 仓库添加失败，跳过安装"
+}
+apt-get install -y speedtest >/dev/null 2>&1 || {
+    echo "警告: speedtest 安装失败，跳过"
 }
 
 # 配置BBR+FQ
