@@ -34,22 +34,60 @@ apt upgrade -y -qq || {
 echo "[3/3] 安装常用软件..."
 apt install -y -qq sudo curl iperf3 mtr-tiny wget nano vim git iputils-ping dnsutils lsof net-tools jq whois nmap >/dev/null 2>&1 || true
 
-# 尝试安装nexttrace（可能不在默认仓库中）
+# 安装nexttrace
 echo "安装 nexttrace..."
-if ! apt install -y -qq nexttrace >/dev/null 2>&1; then
-    # 从GitHub下载安装nexttrace
-    ARCH=$(uname -m)
-    case "$ARCH" in
-        x86_64) ARCH="amd64" ;;
-        aarch64) ARCH="arm64" ;;
-        *) ARCH="amd64" ;;
-    esac
-    if wget -q -O /tmp/nexttrace "https://github.com/nxtrace/Ntrace-core/releases/latest/download/nexttrace-linux-${ARCH}" >/dev/null 2>&1; then
-        chmod +x /tmp/nexttrace
-        mv /tmp/nexttrace /usr/local/bin/nexttrace 2>/dev/null || true
-        echo "nexttrace 已从GitHub安装"
+# 先尝试从默认仓库安装
+if apt install -y -qq nexttrace >/dev/null 2>&1; then
+    echo "nexttrace 已安装"
+else
+    # 添加nexttrace官方仓库
+    echo "添加 nexttrace 官方仓库..."
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://github.com/nxtrace/nexttrace-debs/releases/latest/download/nexttrace-archive-keyring.gpg -o /etc/apt/keyrings/nexttrace.gpg >/dev/null 2>&1 || true
+    
+    if [[ -f /etc/apt/keyrings/nexttrace.gpg ]]; then
+        echo "Types: deb
+URIs: https://github.com/nxtrace/nexttrace-debs/releases/latest/download/
+Suites: ./
+Signed-By: /etc/apt/keyrings/nexttrace.gpg" > /etc/apt/sources.list.d/nexttrace.sources 2>/dev/null || true
+        
+        # 更新仓库并安装
+        apt update -qq >/dev/null 2>&1 || true
+        if apt install -y -qq nexttrace >/dev/null 2>&1; then
+            echo "nexttrace 已从官方仓库安装"
+        else
+            # 如果还是失败，从GitHub下载二进制文件
+            echo "从GitHub下载 nexttrace..."
+            ARCH=$(uname -m)
+            case "$ARCH" in
+                x86_64) ARCH="amd64" ;;
+                aarch64) ARCH="arm64" ;;
+                *) ARCH="amd64" ;;
+            esac
+            if wget -q -O /tmp/nexttrace "https://github.com/nxtrace/Ntrace-core/releases/latest/download/nexttrace-linux-${ARCH}" >/dev/null 2>&1; then
+                chmod +x /tmp/nexttrace
+                mv /tmp/nexttrace /usr/local/bin/nexttrace 2>/dev/null || true
+                echo "nexttrace 已从GitHub安装"
+            else
+                echo "nexttrace 安装失败，跳过"
+            fi
+        fi
     else
-        echo "nexttrace 安装失败，跳过"
+        # 如果添加仓库失败，直接从GitHub下载
+        echo "从GitHub下载 nexttrace..."
+        ARCH=$(uname -m)
+        case "$ARCH" in
+            x86_64) ARCH="amd64" ;;
+            aarch64) ARCH="arm64" ;;
+            *) ARCH="amd64" ;;
+        esac
+        if wget -q -O /tmp/nexttrace "https://github.com/nxtrace/Ntrace-core/releases/latest/download/nexttrace-linux-${ARCH}" >/dev/null 2>&1; then
+            chmod +x /tmp/nexttrace
+            mv /tmp/nexttrace /usr/local/bin/nexttrace 2>/dev/null || true
+            echo "nexttrace 已从GitHub安装"
+        else
+            echo "nexttrace 安装失败，跳过"
+        fi
     fi
 fi
 
