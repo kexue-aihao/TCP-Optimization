@@ -32,15 +32,25 @@ apt upgrade -y -qq || {
 
 # 安装软件包
 echo "[3/3] 安装常用软件..."
-apt install -y -qq curl iperf3 mtr-tiny wget nano vim git iputils-ping dnsutils lsof net-tools jq whois nmap 2>/dev/null || {
-    echo "警告: 部分软件包安装失败，继续执行..."
-}
+apt install -y -qq sudo curl iperf3 mtr-tiny wget nano vim git iputils-ping dnsutils lsof net-tools jq whois nmap >/dev/null 2>&1 || true
 
 # 尝试安装nexttrace（可能不在默认仓库中）
-if apt install -y -qq nexttrace 2>/dev/null; then
-    echo "nexttrace 安装成功"
-else
-    echo "警告: nexttrace 未安装（可能不在仓库中）"
+echo "安装 nexttrace..."
+if ! apt install -y -qq nexttrace >/dev/null 2>&1; then
+    # 从GitHub下载安装nexttrace
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        x86_64) ARCH="amd64" ;;
+        aarch64) ARCH="arm64" ;;
+        *) ARCH="amd64" ;;
+    esac
+    if wget -q -O /tmp/nexttrace "https://github.com/nxtrace/Ntrace-core/releases/latest/download/nexttrace-linux-${ARCH}" >/dev/null 2>&1; then
+        chmod +x /tmp/nexttrace
+        mv /tmp/nexttrace /usr/local/bin/nexttrace 2>/dev/null || true
+        echo "nexttrace 已从GitHub安装"
+    else
+        echo "nexttrace 安装失败，跳过"
+    fi
 fi
 
 # 配置BBR+FQ
