@@ -15,3 +15,12 @@
 ## 其他VPS厂商的机器如果有需要补充参数可以提交PR合并
 
 ---
+
+脚本快捷复制命令
+
+---
+
+### AWS光帆日本调参命令
+
+wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/2C1G_Amazon_micro_JP_install.sh && bash 2C1G_Amazon_micro_JP_install.sh
+
