@@ -22,5 +22,5 @@
 
 ### AWS光帆日本调参命令
 
-wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/2C1G_Amazon_micro_JP_install.sh && bash 2C1G_Amazon_micro_JP_install.sh
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/2C1G_Amazon_micro_JP_install.sh && bash 2C1G_Amazon_micro_JP_install.sh
 
