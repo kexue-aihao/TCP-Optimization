@@ -15,6 +15,9 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# 总步骤数（用于进度显示）
+TOTAL_STEPS=6
+
 # 配置参数
 SSH_PORT_MIN=1000
 SSH_PORT_MAX=65535
@@ -24,10 +27,12 @@ CONTAINER_MEMORY="512m"
 CONTAINER_NAME_PREFIX="nat"
 IMAGE_NAME="nat-debian:latest"
 INFO_FILE="/root/nat-machines-info.txt"
+SWAP_HOST_DIR="/var/nat-swap"   # 每台 NAT 独立 swap 文件存放目录（宿主机真实磁盘）
 
 echo -e "${BLUE}======================================${NC}"
 echo -e "${BLUE}  VPS NAT 切割脚本 v2.0${NC}"
-echo -e "${BLUE}======================================${NC}\n"
+echo -e "${BLUE}======================================${NC}"
+echo -e "${CYAN}执行步骤: [1]清理 → [2]Swap → [3]Docker → [4]镜像 → [5]容器 → [6]完成${NC}\n"
 
 # 检查 root 权限
 if [[ $EUID -ne 0 ]]; then
@@ -38,6 +43,32 @@ fi
 #============================================
 # 工具函数
 #============================================
+
+# 显示步骤进度 [当前/总数] 步骤名
+step_progress() {
+    local current=$1
+    local total=${2:-$TOTAL_STEPS}
+    local msg=$3
+    local pct=$((current * 100 / total))
+    printf "\r  ${CYAN}[%d/%d]${NC} %-50s ${YELLOW}%3d%%${NC}" "$current" "$total" "$msg" "$pct"
+}
+
+# 绘制进度条
+# 用法: progress_bar 当前值 总值 [宽度]
+progress_bar() {
+    local current=$1
+    local total=${2:-1}
+    [ "$total" -lt 1 ] && total=1
+    [ "$current" -gt "$total" ] && current=$total
+    local width=${3:-40}
+    local pct=$((current * 100 / total))
+    local filled=$((width * current / total))
+    local empty=$((width - filled))
+    printf "["
+    printf "%${filled}s" | tr ' ' '█'
+    printf "%${empty}s" | tr ' ' '░'
+    printf "] %3d%%" "$pct"
+}
 
 # 生成18位强密码
 generate_password() {
@@ -128,13 +159,23 @@ select_count_interactive() {
 }
 
 #============================================
-# 清理函数
+# 检测与清理函数
 #============================================
 
+# 检测当前机器是否已存在 NAT 切割容器
+has_existing_nat() {
+    docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qE "^${CONTAINER_NAME_PREFIX}[0-9]+$" && return 0 || return 1
+}
+
+# 完整清理：删除所有 NAT 相关资源
 cleanup_all() {
-    echo -e "${YELLOW}【清理旧资源】${NC}"
+    step_progress 1 "$TOTAL_STEPS" "清理旧资源..."
+    echo ""
+    if has_existing_nat; then
+        echo -e "  ${YELLOW}检测到已存在 NAT 切割容器，正在清理...${NC}"
+    fi
     
-    # 停止并删除容器
+    # 停止并删除容器 (nat1-nat12)
     for i in {1..12}; do
         local name="${CONTAINER_NAME_PREFIX}${i}"
         if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${name}$"; then
@@ -156,15 +197,16 @@ cleanup_all() {
     # 删除构建目录
     [ -d "/tmp/nat-build" ] && rm -rf /tmp/nat-build && echo -e "  ${GREEN}✓${NC} 已删除构建目录"
     
-    # 删除宿主机 swap
-    if [ -f /swapfile ]; then
-        swapoff /swapfile 2>/dev/null || true
-        rm -f /swapfile
-        sed -i '\|^/swapfile|d' /etc/fstab 2>/dev/null || true
-        echo -e "  ${GREEN}✓${NC} 已删除宿主机 swap"
+    # 关闭并删除每台 NAT 的 swap 文件（释放磁盘和 swap 空间）
+    if [ -d "$SWAP_HOST_DIR" ]; then
+        for sf in "$SWAP_HOST_DIR"/*/swapfile; do
+            [ -f "$sf" ] && swapoff "$sf" 2>/dev/null || true
+        done
+        rm -rf "$SWAP_HOST_DIR"
+        echo -e "  ${GREEN}✓${NC} 已删除 NAT swap 目录"
     fi
     
-    echo -e "${GREEN}清理完成${NC}\n"
+    echo -e "  ${GREEN}✓ 清理完成${NC}\n"
 }
 
 #============================================
@@ -172,16 +214,22 @@ cleanup_all() {
 #============================================
 
 setup_host_swap() {
-    echo -e "${YELLOW}【配置宿主机 Swap】${NC}"
+    step_progress 2 "$TOTAL_STEPS" "配置宿主机 Swap..."
+    echo ""
     
     if [ -f /swapfile ] && swapon -s | grep -q '/swapfile'; then
-        echo -e "  ${GREEN}✓${NC} Swap 已存在\n"
+        echo -e "  ${GREEN}✓ Swap 已存在${NC}\n"
         return
     fi
     
-    echo "  创建 ${HOST_SWAP_SIZE} swap 文件..."
-    dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none 2>/dev/null || \
-    fallocate -l ${HOST_SWAP_SIZE} /swapfile 2>/dev/null
+    echo -n "  创建 ${HOST_SWAP_SIZE} swap 文件 "
+    if dd if=/dev/zero of=/swapfile bs=1M count=2048 status=progress 2>/dev/null; then
+        echo ""
+    else
+        dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none 2>/dev/null || \
+        fallocate -l ${HOST_SWAP_SIZE} /swapfile 2>/dev/null
+        echo -e "${GREEN}✓${NC}"
+    fi
     
     chmod 600 /swapfile
     mkswap /swapfile >/dev/null 2>&1
@@ -196,18 +244,19 @@ setup_host_swap() {
         echo 'vm.swappiness=10' >> /etc/sysctl.conf
     fi
     
-    echo -e "  ${GREEN}✓${NC} Swap 配置完成\n"
+    echo -e "  ${GREEN}✓ Swap 配置完成${NC}\n"
 }
 
 install_docker() {
-    echo -e "${YELLOW}【检查 Docker】${NC}"
+    step_progress 3 "$TOTAL_STEPS" "检查/安装 Docker..."
+    echo ""
     
     if command -v docker &>/dev/null; then
-        echo -e "  ${GREEN}✓${NC} Docker 已安装\n"
+        echo -e "  ${GREEN}✓ Docker 已安装${NC}\n"
         return
     fi
     
-    echo "  正在安装 Docker..."
+    echo -e "  正在安装 Docker ${YELLOW}[请稍候...]${NC}"
     curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
     sh /tmp/get-docker.sh >/dev/null 2>&1
     rm -f /tmp/get-docker.sh
@@ -215,7 +264,7 @@ install_docker() {
     systemctl enable docker >/dev/null 2>&1
     systemctl start docker
     
-    echo -e "  ${GREEN}✓${NC} Docker 安装完成\n"
+    echo -e "  ${GREEN}✓ Docker 安装完成${NC}\n"
 }
 
 #============================================
@@ -223,7 +272,8 @@ install_docker() {
 #============================================
 
 build_image() {
-    echo -e "${YELLOW}【构建 NAT 镜像】${NC}"
+    step_progress 4 "$TOTAL_STEPS" "构建 NAT 镜像..."
+    echo ""
     
     local build_dir="/tmp/nat-build"
     mkdir -p "$build_dir"
@@ -249,15 +299,28 @@ RUN apt-get update && \
     ssh-keygen -A
 
 EXPOSE 22
-
-CMD ["/usr/sbin/sshd", "-D"]
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 EOF
     
-    echo "  构建镜像中..."
-    docker build -t "$IMAGE_NAME" "$build_dir" >/dev/null 2>&1
+    # 创建 entrypoint：仅设置密码并启动 sshd（swap 由宿主机预先创建并启用）
+    cat > "$build_dir/entrypoint.sh" <<'ENTRYEOF'
+#!/bin/bash
+mkdir -p /run/sshd
+[ -n "$ROOT_PASSWORD" ] && echo "root:$ROOT_PASSWORD" | chpasswd
+exec /usr/sbin/sshd -D
+ENTRYEOF
     
+    echo -n "  构建镜像中"
+    if docker build -t "$IMAGE_NAME" "$build_dir" 2>/dev/null; then
+        echo -e " ${GREEN}✓${NC}"
+    else
+        echo -e " ${RED}失败${NC}"
+        exit 1
+    fi
     rm -rf "$build_dir"
-    echo -e "  ${GREEN}✓${NC} 镜像构建完成\n"
+    echo -e "  ${GREEN}✓ 镜像构建完成${NC}\n"
 }
 
 #============================================
@@ -266,7 +329,8 @@ EOF
 
 create_containers() {
     local count=$1
-    echo -e "${YELLOW}【创建 NAT 容器】${NC}"
+    step_progress 5 "$TOTAL_STEPS" "创建 NAT 容器..."
+    echo ""
     
     local public_ip=$(get_public_ipv4)
     local used_ports=()
@@ -280,12 +344,28 @@ create_containers() {
         
         used_ports+=($port)
         
-        # 计算总 swap 限制
+        printf "\r  "
+        progress_bar "$i" "$count" 30
+        printf " 创建 %s (含 2.5G swap)..." "$name"
+        
+        # 1. 宿主机创建并启用每台 NAT 独立的 2.5G swap 文件（确保可用）
+        local swap_file="${SWAP_HOST_DIR}/${name}/swapfile"
+        local swap_dir=$(dirname "$swap_file")
+        mkdir -p "$swap_dir"
+        
+        if [ ! -f "$swap_file" ] || [ ! -s "$swap_file" ]; then
+            fallocate -l "${CONTAINER_SWAP_SIZE}" "$swap_file" 2>/dev/null || \
+                dd if=/dev/zero of="$swap_file" bs=1M count=2560 status=none 2>/dev/null
+            chmod 600 "$swap_file"
+            mkswap "$swap_file" >/dev/null 2>&1
+        fi
+        swapon "$swap_file" 2>/dev/null || true
+        
+        # 2. 创建容器：--memory-swap 限制每台最多使用 512m+2.5G
         local mem_mb=512
         local swap_mb=2560
         local total_mb=$((mem_mb + swap_mb))
         
-        # 创建容器
         docker run -d \
             --name "$name" \
             -p ${port}:22 \
@@ -294,15 +374,16 @@ create_containers() {
             --restart=unless-stopped \
             -e "ROOT_PASSWORD=${password}" \
             "$IMAGE_NAME" \
-            /bin/bash -c "echo 'root:${password}' | chpasswd && exec /usr/sbin/sshd -D" \
             >/dev/null 2>&1
         
         echo "${name}|${port}|${password}" >> "$INFO_FILE"
-        echo -e "  ${GREEN}✓${NC} ${name} - 端口 ${port}"
+        printf "\r  "
+        progress_bar "$i" "$count" 30
+        echo -e " ${GREEN}✓${NC} ${name} - 端口 ${port}"
     done
     
+    echo -e "\n  ${GREEN}✓ 共创建 ${count} 台 NAT 机器${NC}\n"
     echo "${used_ports[*]}" >> "$INFO_FILE"
-    echo -e "\n${GREEN}完成！共创建 ${count} 台 NAT 机器${NC}\n"
 }
 
 #============================================
@@ -310,6 +391,9 @@ create_containers() {
 #============================================
 
 show_info() {
+    step_progress 6 "$TOTAL_STEPS" "生成连接信息..."
+    echo -e "\n"
+    
     local public_ip=$(get_public_ipv4)
     
     echo -e "${GREEN}========================================${NC}"
@@ -328,7 +412,7 @@ show_info() {
     echo -e "\n${BLUE}【重要提示】${NC}"
     echo -e "  • 连接 IP: ${YELLOW}${public_ip}${NC} (IPv4)"
     echo -e "  • 用户名: ${YELLOW}root${NC}"
-    echo -e "  • 每台机器: 512M 内存 + 2.5G Swap"
+    echo -e "  • 每台机器: 512M 内存 + 独立 2.5G Swap（宿主机创建，cgroup 限制）"
     echo -e "  • 请确保云服务商安全组放行相应 SSH 端口"
     echo -e "  • 信息已保存至: ${YELLOW}${INFO_FILE}${NC}\n"
     echo -e "${GREEN}========================================${NC}\n"
