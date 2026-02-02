@@ -27,3 +27,7 @@
 ### 一键切割NAT脚本
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/nat.sh && bash nat.sh
+	
+### 拉黑Ucloud快捷命令
+
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/block_as135377.sh && bash block_as135377.sh
