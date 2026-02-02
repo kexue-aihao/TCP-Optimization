@@ -28,7 +28,8 @@ if ! command -v ipset &>/dev/null; then
     if install_ipset; then
         if command -v ipset &>/dev/null; then
             echo "ipset 安装成功，重新执行脚本..."
-            exec "$0"
+            SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+            exec bash "$SCRIPT_PATH"
         fi
     fi
 fi
