@@ -2,11 +2,52 @@
 # ITDOG 探测节点拉黑脚本 - VPS 层面拉黑 ping/tcping/HTTP 探测 IP
 # 数据来源: https://github.com/IcyBlue17/dont_ping_me
 # 用法: bash block_itdog.sh
+#        bash block_itdog.sh remove <IP> [IP2 ...]   # 从拉黑规则中移除指定 IP 并保存
 
 set -e
 
 # root 检查
 [[ $EUID -ne 0 ]] && { echo "请使用 root 运行: sudo bash $0"; exit 1; }
+
+# ---------- 子命令: remove 移除指定 IP ----------
+if [[ "${1:-}" == "remove" ]]; then
+    shift
+    [[ $# -eq 0 ]] && { echo "用法: $0 remove <IP> [IP2 ...]"; exit 1; }
+    normalized() {
+        local a="$1"
+        [[ "$a" == *"/"* ]] || a="$a/32"
+        echo "$a"
+    }
+    removed=0
+    while [[ $# -gt 0 ]]; do
+        raw="$1"
+        addr=$(normalized "$raw")
+        base_ip="${addr%%/*}"
+        if ipset list itdog &>/dev/null; then
+            if ipset del itdog "$addr" 2>/dev/null || ipset del itdog "$base_ip" 2>/dev/null; then
+                echo "已从 ipset(itdog) 移除: $base_ip"
+                ((removed++)) || true
+            fi
+        fi
+        if iptables -D INPUT -s "$base_ip" -j DROP 2>/dev/null; then
+            echo "已删除 iptables 规则: $base_ip"
+            ((removed++)) || true
+        elif iptables -D INPUT -s "$addr" -j DROP 2>/dev/null; then
+            echo "已删除 iptables 规则: $addr"
+            ((removed++)) || true
+        fi
+        shift
+    done
+    if [[ $removed -gt 0 ]]; then
+        ipset save > /etc/ipset.conf 2>/dev/null && echo "ipset 已保存" || true
+        mkdir -p /etc/iptables 2>/dev/null
+        iptables-save > /etc/iptables/rules.v4 2>/dev/null && echo "iptables 已保存" || true
+        echo "完成! 已撤销指定 IP 的拉黑规则"
+    else
+        echo "未找到或未移除任何规则（可能该 IP 本不在拉黑列表中）"
+    fi
+    exit 0
+fi
 
 # 缺失依赖时自动安装并重新执行
 install_ipset() {
