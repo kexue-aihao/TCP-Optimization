@@ -35,3 +35,7 @@
 ### 拉黑itdog快捷命令
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/blcok_itdog.sh && bash blcok_itdog.sh
+	
+### 拉黑阿里云
+
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/blcok_aliyun.sh && bash blcok_aliyun.sh
