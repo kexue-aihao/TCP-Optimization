@@ -34,21 +34,86 @@ if ! command -v ipset &>/dev/null; then
     fi
 fi
 
-# 下载 ITDOG 探测节点 IP 列表
-ITDOG_URL="https://raw.githubusercontent.com/IcyBlue17/dont_ping_me/main/itdog.txt"
-TEMP_FILE="/tmp/itdog_ips_$$.txt"
+# 获取 ITDOG 探测节点 IP（从 GitHub + 本地收集）
+get_itdog_ips() {
+    # 1. 尝试从 GitHub 下载最新列表
+    ITDOG_URL="https://raw.githubusercontent.com/IcyBlue17/dont_ping_me/main/itdog.txt"
+    TEMP_FILE="/tmp/itdog_ips_$$.txt"
+    
+    echo "正在下载 ITDOG 探测节点 IP 列表..."
+    if command -v wget &>/dev/null; then
+        wget -qO "$TEMP_FILE" "$ITDOG_URL" 2>/dev/null || curl -sL -o "$TEMP_FILE" "$ITDOG_URL" 2>/dev/null || true
+    else
+        curl -sL -o "$TEMP_FILE" "$ITDOG_URL" 2>/dev/null || true
+    fi
+    
+    # 2. 合并本地收集的 IP（从 tcpdump 抓取）
+    cat >> "$TEMP_FILE" << 'LOCALIPS'
+211.95.35.189
+117.148.172.71
+180.163.134.53
+106.225.223.67
+112.67.249.58
+119.96.16.114
+213.130.140.42
+116.153.63.68
+36.158.204.68
+150.223.3.94
+223.26.78.6
+36.104.133.71
+218.98.53.91
+124.160.160.70
+211.139.55.70
+202.108.15.148
+111.32.145.8
+223.244.186.68
+49.71.77.84
+117.161.136.74
+27.185.235.70
+36.136.125.68
+112.90.210.132
+112.29.205.70
+180.97.244.136
+58.211.13.98
+125.77.129.206
+222.75.5.70
+222.79.71.253
+112.91.160.101
+59.80.45.132
+211.91.233.130
+14.205.46.244
+183.95.221.228
+112.16.227.111
+111.180.136.169
+117.176.244.250
+122.247.217.59
+43.163.239.208
+183.246.188.214
+218.64.94.212
+218.91.221.95
+183.205.177.20
+117.177.67.15
+42.81.156.75
+49.119.120.226
+120.71.150.171
+156.225.76.237
+101.70.156.68
+42.185.158.83
+60.26.220.104
+43.130.151.11
+43.131.29.194
+194.147.100.44
+38.54.63.220
+38.54.59.59
+LOCALIPS
+    
+    # 提取有效 IP 或 CIDR
+    grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?' "$TEMP_FILE" 2>/dev/null | sort -u
+    rm -f "$TEMP_FILE"
+}
 
-echo "正在下载 ITDOG 探测节点 IP 列表..."
-if command -v wget &>/dev/null; then
-    wget -qO "$TEMP_FILE" "$ITDOG_URL" || curl -sL -o "$TEMP_FILE" "$ITDOG_URL"
-else
-    curl -sL -o "$TEMP_FILE" "$ITDOG_URL"
-fi
-
-# 提取有效 IP 或 CIDR（支持单 IP 和 x.x.x.x/xx 格式）
-IPS=$(grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?' "$TEMP_FILE" 2>/dev/null | sort -u)
+IPS=$(get_itdog_ips)
 COUNT=$(echo "$IPS" | grep -c . 2>/dev/null || true)
-rm -f "$TEMP_FILE"
 
 [[ $COUNT -eq 0 ]] && { echo "错误: 未获取到 IP 数据，请检查网络或源地址"; exit 1; }
 
