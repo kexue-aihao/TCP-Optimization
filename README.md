@@ -31,3 +31,7 @@
 ### 拉黑Ucloud快捷命令
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/block_as135377.sh && bash block_as135377.sh
+
+### 拉黑itdog快捷命令
+
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/blcok_itdog.sh && bash blcok_itdog.sh
