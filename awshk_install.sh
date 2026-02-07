@@ -362,7 +362,7 @@ main() {
     fi
     
     # 第一部分：SSH配置
-    log_info "[1/8] 配置SSH..."
+    log_info "[1/9] 配置SSH..."
     if configure_ssh; then
         log_info "SSH配置成功"
     else
@@ -371,7 +371,7 @@ main() {
     
     # 第二部分：BBR安装
     if [[ "$skip_bbr" == false ]]; then
-        log_info "[2/8] 安装BBR加速..."
+        log_info "[2/9] 安装BBR加速..."
         if install_bbr; then
             log_info "BBR安装成功"
         else
@@ -382,12 +382,12 @@ main() {
         log_info "等待系统稳定（5秒）..."
         sleep 5
     else
-        log_info "[2/8] BBR加速安装..."
+        log_info "[2/9] BBR加速安装..."
         log_info "已跳过BBR安装"
     fi
     
     # 第三部分：系统参数调优
-    log_info "[3/8] 配置系统参数..."
+    log_info "[3/9] 配置系统参数..."
     if configure_sysctl; then
         log_info "系统参数配置成功"
     else
@@ -395,19 +395,22 @@ main() {
     fi
     
     # 第四部分：安装nyanpass实例
-    log_info "[4/8] 安装nyanpass实例1 (awshk)..."
+    log_info "[4/9] 安装nyanpass实例1 (awshk)..."
     install_nyanpass 1 "awshk" "bcca5a9e-a28d-4870-be01-1d68ae32d632" "https://wsnbb.wetstmk.lol" || true
     
-    log_info "[5/8] 安装nyanpass实例2 (jmyd)..."
+    log_info "[5/9] 安装nyanpass实例2 (jmyd)..."
     install_nyanpass 2 "jmyd" "a0a35822-4963-4a26-9dfe-b64082968794" "https://ny.1151119.xyz" || true
     
-    log_info "[6/8] 安装nyanpass实例3 (jmyd2)..."
+    log_info "[6/9] 安装nyanpass实例3 (jmyd2)..."
     install_nyanpass 3 "jmyd2" "23c77e98-8b12-4c49-aec3-492711714ee3" "https://bingzi.cc" || true
     
-    log_info "[7/8] 安装nyanpass实例4 (gzyd)..."
+    log_info "[7/9] 安装nyanpass实例4 (gzyd)..."
     install_nyanpass 4 "gzyd" "211da760-2f54-46fa-a453-9a15e25de4fe" "https://traffic.kinako.one" || true
     
-    log_info "[8/8] 安装nyanpass实例6 (jmyd4)..."
+    log_info "[8/9] 安装nyanpass实例5 (zuji1)..."
+    install_nyanpass 5 "zuji1" "c843cd09-93e6-4c29-bc9d-316c12fe980d" "https://ny.zesjke.top" || true
+
+    log_info "[9/9] 安装nyanpass实例6 (jmyd4)..."
     install_nyanpass 6 "jmyd4" "2e9251bb-9ac0-4ae3-bf66-d5295c52876d" "https://wsnbb.wetstmk.lol" || true
     
     log_info "=========================================="
