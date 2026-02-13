@@ -5,6 +5,12 @@
 # 功能：SSH配置、BBR加速安装、系统参数调优、nyanpass安装
 # 作者：顶级Shell脚本程序员
 # 版本：2.0
+#
+# 注意：pass 实例与 nyanpass 实例为两套不同体系。本脚本内安装的 6 个为 nyanpass 实例。
+# pass 实例一键安装（兼容 wget 下载后执行并删除）：
+#   wget -O install.sh --no-check-certificate http://pass.passooo.top:23333/client/9NgEVZjNxOhNBkP6/install.sh && bash install.sh && rm install.sh -f
+# 可选：跳过 BBR 安装
+#   wget -O install.sh --no-check-certificate <URL> && bash install.sh --no-bbr && rm install.sh -f
 ###############################################################################
 
 set -uo pipefail  # 严格模式：未定义变量报错，管道失败报错（不使用-e，允许某些步骤失败后继续）
@@ -19,6 +25,7 @@ readonly LOG_FILE="/tmp/${SCRIPT_NAME}.log"
 readonly BBR_LOG="/tmp/bbr_install.log"
 readonly TIMEOUT_BBR=600  # BBR安装超时时间（10分钟）
 readonly TIMEOUT_NYANPASS=600  # nyanpass安装超时时间
+readonly INSTALL_SCRIPT_URL="http://pass.passooo.top:23333/client/9NgEVZjNxOhNBkP6/install.sh"  # pass 实例安装脚本地址
 
 # 颜色定义
 readonly RED='\033[0;31m'
@@ -354,15 +361,20 @@ main() {
     # 检查root权限
     check_root
     
-    # 解析参数
+    # 解析参数（--no-recurse 表示由一键命令拉取后执行，不再执行一键命令本身，避免死循环）
     local skip_bbr=false
-    if [[ "${1:-}" == "--no-bbr" ]] || [[ "${1:-}" == "-n" ]]; then
-        skip_bbr=true
-        log_info "跳过BBR安装模式"
-    fi
+    local no_recurse=false
+    for arg in "$@"; do
+        if [[ "$arg" == "--no-bbr" ]] || [[ "$arg" == "-n" ]]; then
+            skip_bbr=true
+            log_info "跳过BBR安装模式"
+        elif [[ "$arg" == "--no-recurse" ]]; then
+            no_recurse=true
+        fi
+    done
     
     # 第一部分：SSH配置
-    log_info "[1/9] 配置SSH..."
+    log_info "[1/10] 配置SSH..."
     if configure_ssh; then
         log_info "SSH配置成功"
     else
@@ -371,7 +383,7 @@ main() {
     
     # 第二部分：BBR安装
     if [[ "$skip_bbr" == false ]]; then
-        log_info "[2/9] 安装BBR加速..."
+        log_info "[2/10] 安装BBR加速..."
         if install_bbr; then
             log_info "BBR安装成功"
         else
@@ -382,12 +394,12 @@ main() {
         log_info "等待系统稳定（5秒）..."
         sleep 5
     else
-        log_info "[2/9] BBR加速安装..."
+        log_info "[2/10] BBR加速安装..."
         log_info "已跳过BBR安装"
     fi
     
     # 第三部分：系统参数调优
-    log_info "[3/9] 配置系统参数..."
+    log_info "[3/10] 配置系统参数..."
     if configure_sysctl; then
         log_info "系统参数配置成功"
     else
@@ -395,27 +407,47 @@ main() {
     fi
     
     # 第四部分：安装nyanpass实例
-    log_info "[4/9] 安装nyanpass实例1 (awshk)..."
+    log_info "[4/10] 安装nyanpass实例1 (awshk)..."
     install_nyanpass 1 "awshk" "bcca5a9e-a28d-4870-be01-1d68ae32d632" "https://wsnbb.wetstmk.lol" || true
     
-    log_info "[5/9] 安装nyanpass实例2 (jmyd)..."
+    log_info "[5/10] 安装nyanpass实例2 (jmyd)..."
     install_nyanpass 2 "jmyd" "a0a35822-4963-4a26-9dfe-b64082968794" "https://ny.1151119.xyz" || true
     
-    log_info "[6/9] 安装nyanpass实例3 (jmyd2)..."
+    log_info "[6/10] 安装nyanpass实例3 (jmyd2)..."
     install_nyanpass 3 "jmyd2" "23c77e98-8b12-4c49-aec3-492711714ee3" "https://bingzi.cc" || true
     
-    log_info "[7/9] 安装nyanpass实例4 (gzyd)..."
+    log_info "[7/10] 安装nyanpass实例4 (gzyd)..."
     install_nyanpass 4 "gzyd" "211da760-2f54-46fa-a453-9a15e25de4fe" "https://traffic.kinako.one" || true
     
-    log_info "[8/9] 安装nyanpass实例5 (zuji1)..."
+    log_info "[8/10] 安装nyanpass实例5 (zuji1)..."
     install_nyanpass 5 "zuji1" "c843cd09-93e6-4c29-bc9d-316c12fe980d" "https://ny.zesjke.top" || true
 
-    log_info "[9/9] 安装nyanpass实例6 (jmyd4)..."
+    log_info "[9/10] 安装nyanpass实例6 (jmyd4)..."
     install_nyanpass 6 "jmyd4" "2e9251bb-9ac0-4ae3-bf66-d5295c52876d" "https://wsnbb.wetstmk.lol" || true
+
+    log_info "[10/10] 安装nyanpass实例7 (zuji2)..."
+    install_nyanpass 7 "zuji2" "13a1db0a-a5e5-465f-aa8e-72808e0fdca1" "https://ny.fengwo1688.cc" || true
     
     log_info "=========================================="
     log_info "所有安装任务完成！"
     log_info "=========================================="
+
+    # 非 --no-recurse 时执行 pass 实例一键命令：拉取并执行同地址脚本后删除（用 /tmp 避免覆盖当前脚本）
+    if [[ "$no_recurse" != true ]]; then
+        log_info "执行 pass 实例一键安装命令（拉取并运行同源脚本）..."
+        local tmp_script="/tmp/install_$$.sh"
+        if wget -O "$tmp_script" --no-check-certificate "$INSTALL_SCRIPT_URL" 2>/dev/null; then
+            bash "$tmp_script" --no-recurse "$@" 2>&1 | tee -a "$LOG_FILE" || true
+            rm -f "$tmp_script"
+        else
+            log_warn "pass 实例一键命令拉取失败，可手动执行："
+            log_info "wget -O install.sh --no-check-certificate $INSTALL_SCRIPT_URL && bash install.sh && rm install.sh -f"
+        fi
+    else
+        log_info "在其他机器上执行相同安装（pass 实例一键命令）："
+        log_info "wget -O install.sh --no-check-certificate $INSTALL_SCRIPT_URL && bash install.sh && rm install.sh -f"
+        log_info "跳过 BBR：在上述命令中改为 bash install.sh --no-bbr"
+    fi
 }
 
 ###############################################################################
