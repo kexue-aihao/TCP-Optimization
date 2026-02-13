@@ -5,12 +5,7 @@
 # 功能：SSH配置、BBR加速安装、系统参数调优、nyanpass安装
 # 作者：顶级Shell脚本程序员
 # 版本：2.0
-#
-# 注意：pass 实例与 nyanpass 实例为两套不同体系。本脚本内安装的 6 个为 nyanpass 实例。
-# pass 实例一键安装（兼容 wget 下载后执行并删除）：
-#   wget -O install.sh --no-check-certificate http://pass.passooo.top:23333/client/9NgEVZjNxOhNBkP6/install.sh && bash install.sh && rm install.sh -f
-# 可选：跳过 BBR 安装
-#   wget -O install.sh --no-check-certificate <URL> && bash install.sh --no-bbr && rm install.sh -f
+# 可选：跳过 BBR 安装时使用 bash install.sh --no-bbr 或 -n
 ###############################################################################
 
 set -uo pipefail  # 严格模式：未定义变量报错，管道失败报错（不使用-e，允许某些步骤失败后继续）
@@ -25,7 +20,6 @@ readonly LOG_FILE="/tmp/${SCRIPT_NAME}.log"
 readonly BBR_LOG="/tmp/bbr_install.log"
 readonly TIMEOUT_BBR=600  # BBR安装超时时间（10分钟）
 readonly TIMEOUT_NYANPASS=600  # nyanpass安装超时时间
-readonly INSTALL_SCRIPT_URL="http://pass.passooo.top:23333/client/9NgEVZjNxOhNBkP6/install.sh"  # pass 实例安装脚本地址
 
 # 颜色定义
 readonly RED='\033[0;31m'
@@ -304,10 +298,10 @@ net.ipv4.tcp_fack=1
 net.ipv4.tcp_window_scaling=1
 net.ipv4.tcp_adv_win_scale=1
 net.ipv4.tcp_moderate_rcvbuf=1
-net.core.rmem_max=12500000
-net.core.wmem_max=12500000
-net.ipv4.tcp_rmem=4096 131072 12500000
-net.ipv4.tcp_wmem=4096 131072 12500000
+net.core.rmem_max=10000000
+net.core.wmem_max=10000000
+net.ipv4.tcp_rmem=4096 190054 10000000
+net.ipv4.tcp_wmem=4096 190054 10000000
 net.ipv4.udp_rmem_min=8192
 net.ipv4.udp_wmem_min=8192
 net.ipv4.ip_forward=1
@@ -361,17 +355,12 @@ main() {
     # 检查root权限
     check_root
     
-    # 解析参数（--no-recurse 表示由一键命令拉取后执行，不再执行一键命令本身，避免死循环）
+    # 解析参数
     local skip_bbr=false
-    local no_recurse=false
-    for arg in "$@"; do
-        if [[ "$arg" == "--no-bbr" ]] || [[ "$arg" == "-n" ]]; then
-            skip_bbr=true
-            log_info "跳过BBR安装模式"
-        elif [[ "$arg" == "--no-recurse" ]]; then
-            no_recurse=true
-        fi
-    done
+    if [[ "${1:-}" == "--no-bbr" ]] || [[ "${1:-}" == "-n" ]]; then
+        skip_bbr=true
+        log_info "跳过BBR安装模式"
+    fi
     
     # 第一部分：SSH配置
     log_info "[1/10] 配置SSH..."
@@ -431,23 +420,6 @@ main() {
     log_info "=========================================="
     log_info "所有安装任务完成！"
     log_info "=========================================="
-
-    # 非 --no-recurse 时执行 pass 实例一键命令：拉取并执行同地址脚本后删除（用 /tmp 避免覆盖当前脚本）
-    if [[ "$no_recurse" != true ]]; then
-        log_info "执行 pass 实例一键安装命令（拉取并运行同源脚本）..."
-        local tmp_script="/tmp/install_$$.sh"
-        if wget -O "$tmp_script" --no-check-certificate "$INSTALL_SCRIPT_URL" 2>/dev/null; then
-            bash "$tmp_script" --no-recurse "$@" 2>&1 | tee -a "$LOG_FILE" || true
-            rm -f "$tmp_script"
-        else
-            log_warn "pass 实例一键命令拉取失败，可手动执行："
-            log_info "wget -O install.sh --no-check-certificate $INSTALL_SCRIPT_URL && bash install.sh && rm install.sh -f"
-        fi
-    else
-        log_info "在其他机器上执行相同安装（pass 实例一键命令）："
-        log_info "wget -O install.sh --no-check-certificate $INSTALL_SCRIPT_URL && bash install.sh && rm install.sh -f"
-        log_info "跳过 BBR：在上述命令中改为 bash install.sh --no-bbr"
-    fi
 }
 
 ###############################################################################
