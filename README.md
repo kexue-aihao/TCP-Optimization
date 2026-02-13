@@ -40,6 +40,10 @@
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/blcok_aliyun.sh && bash blcok_aliyun.sh
 	
-### AWS香港快捷一键上机调参
+### AWS香港C5N_2C配置一键上机
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/awshk_install.sh $$ bash awshk_install.sh
+	
+### AWS香港C6IN_2C配置一键上机
+
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/awshk_c6in_2c_install $$ bash awshk_c6in_2c_install
