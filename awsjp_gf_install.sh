@@ -64,9 +64,7 @@ cleanup() {
         $func || true
     done
     
-    # 清理残留进程（如果需要）
-    pkill -9 -f "kejilio" 2>/dev/null || true
-    pkill -9 -f "kejilion" 2>/dev/null || true
+    # 注意：不在正常退出时 pkill，避免杀掉刚安装的 nyanpass 服务进程
 }
 
 # 注册清理函数
@@ -258,9 +256,9 @@ configure_ssh() {
         # 删除可能冲突的配置目录
         rm -rf /etc/ssh/sshd_config.d 2>/dev/null || true
         
-        # 重启SSH服务
+        # 重启SSH服务（Debian/Ubuntu 用 ssh，RHEL/CentOS 用 sshd）
         sleep 3
-        if systemctl restart sshd 2>/dev/null; then
+        if systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null; then
             log_info "SSH服务重启成功"
         else
             log_warn "SSH服务重启可能失败"
@@ -288,28 +286,28 @@ configure_sysctl() {
     # 写入新配置
     cat > /etc/sysctl.conf << 'SYSCTL_EOF'
 fs.file-max = 6815744
-net.ipv4.tcp_no_metrics_save = 1
-net.ipv4.tcp_ecn = 0
-net.ipv4.tcp_frto = 0
-net.ipv4.tcp_mtu_probing = 0
-net.ipv4.tcp_rfc1337 = 0
-net.ipv4.tcp_sack = 1
-net.ipv4.tcp_fack = 1
-net.ipv4.tcp_window_scaling = 1
-net.ipv4.tcp_adv_win_scale = 1
-net.ipv4.tcp_moderate_rcvbuf = 1
-net.core.rmem_max = 40000000
-net.core.wmem_max = 40000000
-net.ipv4.tcp_rmem = 8192 73728 40000000
-net.ipv4.tcp_wmem = 8192 73728 40000000
-net.ipv4.udp_rmem_min = 8192
-net.ipv4.udp_wmem_min = 8192
-net.ipv4.ip_forward = 1
-net.ipv4.conf.all.route_localnet = 1
-net.ipv4.conf.all.forwarding = 1
-net.ipv4.conf.default.forwarding = 1
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
+net.ipv4.tcp_no_metrics_save=1
+net.ipv4.tcp_ecn=0
+net.ipv4.tcp_frto=0
+net.ipv4.tcp_mtu_probing=0
+net.ipv4.tcp_rfc1337=0
+net.ipv4.tcp_sack=1
+net.ipv4.tcp_fack=1
+net.ipv4.tcp_window_scaling=1
+net.ipv4.tcp_adv_win_scale=1
+net.ipv4.tcp_moderate_rcvbuf=1
+net.core.rmem_max=40000000
+net.core.wmem_max=40000000
+net.ipv4.tcp_rmem=4096 73728 40000000
+net.ipv4.tcp_wmem=4096 73728 40000000
+net.ipv4.udp_rmem_min=8192
+net.ipv4.udp_wmem_min=8192
+net.ipv4.ip_forward=1
+net.ipv4.conf.all.route_localnet=1
+net.ipv4.conf.all.forwarding=1
+net.ipv4.conf.default.forwarding=1
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
 SYSCTL_EOF
     
     # 应用配置
@@ -329,7 +327,7 @@ install_nyanpass() {
     local service_name=$2
     local token=$3
     local url=$4
-    local use_o=${5:-yes}  # 可选：yes 使用 -o，no 不使用
+    local use_o=${5:-yes}  # 第5参数：yes=带-o，no=不带-o（gfjp 需 no）
     
     log_info "安装nyanpass实例${instance_num} (${service_name})..."
     
@@ -340,9 +338,8 @@ install_nyanpass() {
         args="-o -t ${token} -u ${url}"
     fi
     
-    local install_cmd="printf '${service_name}\nn\ny\n' | timeout ${TIMEOUT_NYANPASS} bash <(curl -fLSs https://dl.nyafw.com/download/nyanpass-install.sh) rel_nodeclient \"${args}\""
-    
-    if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
+    # 直接执行，避免 eval 可能导致的引号/转义问题（args 作为单参数传递）
+    if printf '%s\nn\ny\n' "$service_name" | timeout "$TIMEOUT_NYANPASS" bash <(curl -fLSs https://dl.nyafw.com/download/nyanpass-install.sh) rel_nodeclient "$args" 2>&1 | tee -a "$LOG_FILE"; then
         log_info "nyanpass实例${instance_num}安装完成"
         return 0
     else
@@ -405,7 +402,7 @@ main() {
     
     # 第四部分：安装nyanpass实例
     log_info "[4/4] 安装nyanpass实例 (gfjp)..."
-    install_nyanpass 1 "gfjp" "c713d855-4456-4920-b81f-48b0fe9ed5e1" "https://wsnbb.wetstmk.lol" "no" || true
+    install_nyanpass 1 "gfjp" "c713d855-4456-4920-b81f-48b0fe9ed5e1" "https://wsnbb.wetstmk.lol" || true
     
     log_info "=========================================="
     log_info "所有安装任务完成！"
