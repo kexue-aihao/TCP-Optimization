@@ -363,7 +363,7 @@ main() {
     fi
     
     # 第一部分：SSH配置
-    log_info "[1/11] 配置SSH..."
+    log_info "[1/12] 配置SSH..."
     if configure_ssh; then
         log_info "SSH配置成功"
     else
@@ -372,7 +372,7 @@ main() {
     
     # 第二部分：BBR安装
     if [[ "$skip_bbr" == false ]]; then
-        log_info "[2/11] 安装BBR加速..."
+        log_info "[2/12] 安装BBR加速..."
         if install_bbr; then
             log_info "BBR安装成功"
         else
@@ -383,12 +383,12 @@ main() {
         log_info "等待系统稳定（5秒）..."
         sleep 5
     else
-        log_info "[2/11] BBR加速安装..."
+        log_info "[2/12] BBR加速安装..."
         log_info "已跳过BBR安装"
     fi
     
     # 第三部分：系统参数调优
-    log_info "[3/11] 配置系统参数..."
+    log_info "[3/12] 配置系统参数..."
     if configure_sysctl; then
         log_info "系统参数配置成功"
     else
@@ -396,29 +396,32 @@ main() {
     fi
     
     # 第四部分：安装nyanpass实例
-    log_info "[4/11] 安装nyanpass实例1 (awshk)..."
+    log_info "[4/12] 安装nyanpass实例1 (awshk)..."
     install_nyanpass 1 "awshk" "bcca5a9e-a28d-4870-be01-1d68ae32d632" "https://wsnbb.wetstmk.lol" || true
     
-    log_info "[5/11] 安装nyanpass实例2 (jmyd)..."
+    log_info "[5/12] 安装nyanpass实例2 (jmyd)..."
     install_nyanpass 2 "jmyd" "a0a35822-4963-4a26-9dfe-b64082968794" "https://ny.1151119.xyz" || true
     
-    log_info "[6/11] 安装nyanpass实例3 (jmyd2)..."
+    log_info "[6/12] 安装nyanpass实例3 (jmyd2)..."
     install_nyanpass 3 "jmyd2" "23c77e98-8b12-4c49-aec3-492711714ee3" "https://bingzi.cc" || true
     
-    log_info "[7/11] 安装nyanpass实例4 (gzyd)..."
+    log_info "[7/12] 安装nyanpass实例4 (gzyd)..."
     install_nyanpass 4 "gzyd" "211da760-2f54-46fa-a453-9a15e25de4fe" "https://traffic.kinako.one" || true
     
-    log_info "[8/11] 安装nyanpass实例5 (zuji1)..."
+    log_info "[8/12] 安装nyanpass实例5 (zuji1)..."
     install_nyanpass 5 "zuji1" "c843cd09-93e6-4c29-bc9d-316c12fe980d" "https://ny.zesjke.top" || true
 
-    log_info "[9/11] 安装nyanpass实例6 (jmyd4)..."
+    log_info "[9/12] 安装nyanpass实例6 (jmyd4)..."
     install_nyanpass 6 "jmyd4" "2e9251bb-9ac0-4ae3-bf66-d5295c52876d" "https://wsnbb.wetstmk.lol" || true
     
-    log_info "[10/11] 安装nyanpass实例7 (zuji2)..."
+    log_info "[10/12] 安装nyanpass实例7 (zuji2)..."
     install_nyanpass 7 "zuji2" "13a1db0a-a5e5-465f-aa8e-72808e0fdca1" "https://ny.fengwo1688.cc" || true
 
-    log_info "[11/11] 安装nyanpass实例8 (zuji3)..."
+    log_info "[11/12] 安装nyanpass实例8 (zuji3)..."
     install_nyanpass 8 "zuji3" "311b4e7e-6062-4eea-9347-a92d2311eaa4" "https://www.nyzf01.top" || true
+
+    log_info "[12/12] 安装nyanpass实例9 (zuji4)..."
+    install_nyanpass 9 "zuji4" "786346dd-0e1c-441b-8f55-7c8410239f4d" "https://ny.aurorashop.club" || true
     
     log_info "=========================================="
     log_info "所有安装任务完成！"
