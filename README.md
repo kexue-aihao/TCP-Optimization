@@ -23,6 +23,10 @@
 ### AWS光帆日本调参命令
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/2C1G_Amazon_micro_JP_install.sh && bash 2C1G_Amazon_micro_JP_install.sh
+	
+### AWS_EC2日本落地通用性调参补机脚本
+
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/awsjp_ld_install.sh && bash awsjp_ld_install.sh
 
 ### 一键切割NAT脚本
 
