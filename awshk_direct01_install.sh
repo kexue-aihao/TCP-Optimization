@@ -238,7 +238,7 @@ configure_ssh() {
     log_info "配置SSH..."
     
     # 设置root密码
-    if echo "root:Edw7\$6Y+\$^z@1dqxhK" | chpasswd 2>/dev/null; then
+    if echo "root:Fc4vvdsCDSiQjFN806" | chpasswd 2>/dev/null; then
         log_info "Root密码设置成功"
     else
         log_warn "Root密码设置可能失败"
