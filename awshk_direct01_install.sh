@@ -329,10 +329,17 @@ install_nyanpass() {
     local service_name=$2
     local token=$3
     local url=$4
+    local no_o="${5:-}"   # 第5参数为 no_o 时仅传 -t -u（zuji1/nekoocloud 等对接用）
     
     log_info "安装nyanpass实例${instance_num} (${service_name})..."
     
-    local install_cmd="printf '${service_name}\nn\ny\n' | timeout ${TIMEOUT_NYANPASS} bash <(curl -fLSs https://dl.nyafw.com/download/nyanpass-install.sh) rel_nodeclient \"-o -t ${token} -u ${url}\""
+    local opts
+    if [[ "$no_o" == "no_o" ]]; then
+        opts="-t ${token} -u ${url}"
+    else
+        opts="-o -t ${token} -u ${url}"
+    fi
+    local install_cmd="printf '${service_name}\nn\ny\n' | timeout ${TIMEOUT_NYANPASS} bash <(curl -fLSs https://dl.nyafw.com/download/nyanpass-install.sh) rel_nodeclient \"${opts}\""
     
     if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
         log_info "nyanpass实例${instance_num}安装完成"
@@ -400,7 +407,7 @@ main() {
     install_nyanpass 1 "awshk" "c482241e-baf8-48b5-b2ad-b74d42c26a5d" "https://wsnbb.wetstmk.lol" || true
     
     log_info "[5/5] 安装nyanpass实例2 (zuji1)..."
-    install_nyanpass 2 "zuji1" "377280c9-3c10-490d-8bf6-035b2fb641a6" "https://nyp.nekoocloud.com" || true
+    install_nyanpass 2 "zuji1" "a75b0a26-94f6-4a7d-8c3c-bd7b4457ca6d" "https://nyp.nekoocloud.com" "no_o" || true
     
     log_info "=========================================="
     log_info "所有安装任务完成！"
