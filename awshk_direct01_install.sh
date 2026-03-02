@@ -329,17 +329,11 @@ install_nyanpass() {
     local service_name=$2
     local token=$3
     local url=$4
-    local no_o="${5:-}"   # 第5参数为 no_o 时仅传 -t -u（zuji1/zuji2 等对接用）
     
     log_info "安装nyanpass实例${instance_num} (${service_name})..."
     
-    local opts
-    if [[ "$no_o" == "no_o" ]]; then
-        opts="-t ${token} -u ${url}"
-    else
-        opts="-o -t ${token} -u ${url}"
-    fi
-    local install_cmd="printf '${service_name}\nn\ny\n' | timeout ${TIMEOUT_NYANPASS} bash <(curl -fLSs https://dl.nyafw.com/download/nyanpass-install.sh) rel_nodeclient \"${opts}\""
+    # 同一 nyanpass 面板统一用 -t -u（不含 -o）
+    local install_cmd="printf '${service_name}\nn\ny\n' | timeout ${TIMEOUT_NYANPASS} bash <(curl -fLSs https://dl.nyafw.com/download/nyanpass-install.sh) rel_nodeclient \"-t ${token} -u ${url}\""
     
     if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
         log_info "nyanpass实例${instance_num}安装完成"
@@ -402,7 +396,7 @@ main() {
         log_warn "系统参数配置可能未完全成功，继续执行"
     fi
     
-    # 第四部分：安装nyanpass实例（三个实例与 awshk 完全一致：均 4 参数）
+    # 第四部分：安装nyanpass实例（同一面板统一 -t -u）
     log_info "[4/6] 安装nyanpass实例1 (awshk)..."
     install_nyanpass 1 "awshk" "c482241e-baf8-48b5-b2ad-b74d42c26a5d" "https://wsnbb.wetstmk.lol" || true
     
