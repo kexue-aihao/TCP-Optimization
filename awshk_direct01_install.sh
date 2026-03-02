@@ -20,6 +20,7 @@ readonly LOG_FILE="/tmp/${SCRIPT_NAME}.log"
 readonly BBR_LOG="/tmp/bbr_install.log"
 readonly TIMEOUT_BBR=600  # BBR安装超时时间（10分钟）
 readonly TIMEOUT_NYANPASS=600  # nyanpass安装超时时间
+readonly NYANPASS_INSTALL_GAP=25  # 多实例安装间隔（秒），避免同路径/同端口/安装锁冲突
 
 # 颜色定义
 readonly RED='\033[0;31m'
@@ -396,11 +397,18 @@ main() {
     fi
     
     # 第四部分：安装nyanpass实例（与参考脚本一致：仅 4 参数，统一 "-o -t -u"）
+    # 多实例需间隔执行：安装脚本默认 /opt/nyanpass、服务名 nyanpass，连续安装易导致后实例覆盖或端口冲突，间隔 NYANPASS_INSTALL_GAP 秒可缓解
     log_info "[4/6] 安装nyanpass实例1 (awshk)..."
     install_nyanpass 1 "awshk" "c482241e-baf8-48b5-b2ad-b74d42c26a5d" "https://wsnbb.wetstmk.lol" || true
     
+    log_info "等待 ${NYANPASS_INSTALL_GAP} 秒后安装下一实例（避免路径/端口/锁冲突）..."
+    sleep "$NYANPASS_INSTALL_GAP"
+    
     log_info "[5/6] 安装nyanpass实例2 (zuji1)..."
     install_nyanpass 2 "zuji1" "a75b0a26-94f6-4a7d-8c3c-bd7b4457ca6d" "https://nyp.nekoocloud.com" || true
+    
+    log_info "等待 ${NYANPASS_INSTALL_GAP} 秒后安装下一实例..."
+    sleep "$NYANPASS_INSTALL_GAP"
     
     log_info "[6/6] 安装nyanpass实例3 (zuji2)..."
     install_nyanpass 3 "zuji2" "5588472f-45c9-4ee4-98ca-0c8a10f8b432" "https://dcny.ny99u.com" || true
