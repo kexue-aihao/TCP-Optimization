@@ -402,7 +402,7 @@ main() {
         log_warn "系统参数配置可能未完全成功，继续执行"
     fi
     
-    # 第四部分：安装nyanpass实例（三个实例处理逻辑与 awshk 完全一致：均 4 参数）
+    # 第四部分：安装nyanpass实例（三个实例与 awshk 完全一致：均 4 参数）
     log_info "[4/6] 安装nyanpass实例1 (awshk)..."
     install_nyanpass 1 "awshk" "c482241e-baf8-48b5-b2ad-b74d42c26a5d" "https://wsnbb.wetstmk.lol" || true
     
