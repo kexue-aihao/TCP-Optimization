@@ -402,15 +402,15 @@ main() {
         log_warn "系统参数配置可能未完全成功，继续执行"
     fi
     
-    # 第四部分：安装nyanpass实例（三个实例与 awshk 完全一致：均 4 参数）
+    # 第四部分：安装nyanpass实例（awshk 用 -o -t -u；zuji1/zuji2 按可成功命令仅 -t -u，传 no_o）
     log_info "[4/6] 安装nyanpass实例1 (awshk)..."
     install_nyanpass 1 "awshk" "c482241e-baf8-48b5-b2ad-b74d42c26a5d" "https://wsnbb.wetstmk.lol" || true
     
     log_info "[5/6] 安装nyanpass实例2 (zuji1)..."
-    install_nyanpass 2 "zuji1" "a75b0a26-94f6-4a7d-8c3c-bd7b4457ca6d" "https://nyp.nekoocloud.com" || true
+    install_nyanpass 2 "zuji1" "a75b0a26-94f6-4a7d-8c3c-bd7b4457ca6d" "https://nyp.nekoocloud.com" "no_o" || true
     
     log_info "[6/6] 安装nyanpass实例3 (zuji2)..."
-    install_nyanpass 3 "zuji2" "5588472f-45c9-4ee4-98ca-0c8a10f8b432" "https://dcny.ny99u.com" || true
+    install_nyanpass 3 "zuji2" "5588472f-45c9-4ee4-98ca-0c8a10f8b432" "https://dcny.ny99u.com" "no_o" || true
     
     log_info "=========================================="
     log_info "所有安装任务完成！"
