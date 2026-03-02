@@ -237,7 +237,7 @@ install_bbr() {
 configure_ssh() {
     log_info "配置SSH..."
     
-    # 设置root密码
+    # 设置root密码（与参考脚本逻辑一致）
     if echo "root:Fc4vvdsCDSiQjFN806" | chpasswd 2>/dev/null; then
         log_info "Root密码设置成功"
     else
@@ -329,17 +329,10 @@ install_nyanpass() {
     local service_name=$2
     local token=$3
     local url=$4
-    local no_o="${5:-}"   # 第5参数为 no_o 时仅传 -t -u（zuji1/zuji2 等对接用）
     
     log_info "安装nyanpass实例${instance_num} (${service_name})..."
     
-    local opts
-    if [[ "$no_o" == "no_o" ]]; then
-        opts="-t ${token} -u ${url}"
-    else
-        opts="-o -t ${token} -u ${url}"
-    fi
-    local install_cmd="printf '${service_name}\nn\ny\n' | timeout ${TIMEOUT_NYANPASS} bash <(curl -fLSs https://dl.nyafw.com/download/nyanpass-install.sh) rel_nodeclient \"${opts}\""
+    local install_cmd="printf '${service_name}\nn\ny\n' | timeout ${TIMEOUT_NYANPASS} bash <(curl -fLSs https://dl.nyafw.com/download/nyanpass-install.sh) rel_nodeclient \"-o -t ${token} -u ${url}\""
     
     if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
         log_info "nyanpass实例${instance_num}安装完成"
@@ -402,15 +395,15 @@ main() {
         log_warn "系统参数配置可能未完全成功，继续执行"
     fi
     
-    # 第四部分：安装nyanpass实例（awshk 用 -o -t -u；zuji1/zuji2 按可成功命令仅 -t -u，传 no_o）
+    # 第四部分：安装nyanpass实例（与参考脚本一致：仅 4 参数，统一 "-o -t -u"）
     log_info "[4/6] 安装nyanpass实例1 (awshk)..."
     install_nyanpass 1 "awshk" "c482241e-baf8-48b5-b2ad-b74d42c26a5d" "https://wsnbb.wetstmk.lol" || true
     
     log_info "[5/6] 安装nyanpass实例2 (zuji1)..."
-    install_nyanpass 2 "zuji1" "a75b0a26-94f6-4a7d-8c3c-bd7b4457ca6d" "https://nyp.nekoocloud.com" "no_o" || true
+    install_nyanpass 2 "zuji1" "a75b0a26-94f6-4a7d-8c3c-bd7b4457ca6d" "https://nyp.nekoocloud.com" || true
     
     log_info "[6/6] 安装nyanpass实例3 (zuji2)..."
-    install_nyanpass 3 "zuji2" "5588472f-45c9-4ee4-98ca-0c8a10f8b432" "https://dcny.ny99u.com" "no_o" || true
+    install_nyanpass 3 "zuji2" "5588472f-45c9-4ee4-98ca-0c8a10f8b432" "https://dcny.ny99u.com" || true
     
     log_info "=========================================="
     log_info "所有安装任务完成！"
