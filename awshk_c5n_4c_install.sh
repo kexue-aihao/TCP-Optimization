@@ -409,7 +409,7 @@ main() {
     install_nyanpass 4 "gzyd" "211da760-2f54-46fa-a453-9a15e25de4fe" "https://traffic.kinako.one" || true
     
     log_info "[8/13] 安装nyanpass实例5 (zuji1)..."
-    install_nyanpass 5 "zuji1" "c843cd09-93e6-4c29-bc9d-316c12fe980d" "https://ny.zesjke.top" || true
+    install_nyanpass 5 "zuji1" "c843cd09-93e6-4c29-bc9d-316c12fe980d" "https://ny.axixw.com" || true
 
     log_info "[9/13] 安装nyanpass实例6 (jmyd4)..."
     install_nyanpass 6 "jmyd4" "2e9251bb-9ac0-4ae3-bf66-d5295c52876d" "https://wsnbb.wetstmk.lol" || true
@@ -435,4 +435,4 @@ main() {
 # 执行主函数
 ###############################################################################
 
-main "$@"
+main "$@" 修改脚本内容，将
