@@ -59,3 +59,7 @@
 ### AWS_EC2香港直连补机快捷脚本	
 	
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/awshk_direct01_install.sh $$ bash awshk_direct01_install.sh
+	
+### Alice香港落地快捷脚本
+
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/2c4ghk_bbr_install.sh $$ bash 2c4ghk_bbr_install.sh
