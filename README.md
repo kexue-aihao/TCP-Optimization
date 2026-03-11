@@ -48,9 +48,17 @@
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/awshk_install.sh && bash awshk_install.sh
 	
+### AWS香港C5N_4C配置一键上机参数
+
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/awshk_c5n_4c_install.sh && bash awshk_c5n_4c_install.sh	
+	
 ### AWS香港C6IN_2C配置一键上机参数
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/awshk_c6in_2c_install.sh && bash awshk_c6in_2c_install.sh
+	
+### AWS新加坡C5N_4C配置一键上机参数
+
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/awssg_c5n_4c_install.sh && bash awssg_c5n_4c_install.sh	
 	
 ### Aklie-HK快捷调参脚本
 
