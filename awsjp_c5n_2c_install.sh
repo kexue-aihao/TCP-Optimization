@@ -5,7 +5,6 @@
 # 功能：SSH配置、BBR加速安装、系统参数调优、nyanpass安装
 # 作者：顶级Shell脚本程序员
 # 版本：2.0
-# 可选：跳过 BBR 安装时使用 bash install.sh --no-bbr 或 -n
 ###############################################################################
 
 set -uo pipefail  # 严格模式：未定义变量报错，管道失败报错（不使用-e，允许某些步骤失败后继续）
@@ -238,7 +237,7 @@ configure_ssh() {
     log_info "配置SSH..."
     
     # 设置root密码
-    if echo "root:Fc4vvdsCDSiQjFN806" | chpasswd 2>/dev/null; then
+    if echo "root:>Qx\$qpG>1.KF3TWHv>Z=" | chpasswd 2>/dev/null; then
         log_info "Root密码设置成功"
     else
         log_warn "Root密码设置可能失败"
@@ -298,10 +297,10 @@ net.ipv4.tcp_fack=1
 net.ipv4.tcp_window_scaling=1
 net.ipv4.tcp_adv_win_scale=1
 net.ipv4.tcp_moderate_rcvbuf=1
-net.core.rmem_max=50000000
-net.core.wmem_max=50000000
-net.ipv4.tcp_rmem=4096 190054 50000000
-net.ipv4.tcp_wmem=4096 190054 50000000
+net.core.rmem_max=10000000
+net.core.wmem_max=10000000
+net.ipv4.tcp_rmem=4096 190054 10000000
+net.ipv4.tcp_wmem=4096 190054 10000000
 net.ipv4.udp_rmem_min=8192
 net.ipv4.udp_wmem_min=8192
 net.ipv4.ip_forward=1
@@ -332,8 +331,7 @@ install_nyanpass() {
     
     log_info "安装nyanpass实例${instance_num} (${service_name})..."
     
-    # 同一 nyanpass 面板统一用 -t -u（不含 -o）
-    local install_cmd="printf '${service_name}\nn\ny\n' | timeout ${TIMEOUT_NYANPASS} bash <(curl -fLSs https://dl.nyafw.com/download/nyanpass-install.sh) rel_nodeclient \"-t ${token} -u ${url}\""
+    local install_cmd="printf '${service_name}\nn\ny\n' | timeout ${TIMEOUT_NYANPASS} bash <(curl -fLSs https://dl.nyafw.com/download/nyanpass-install.sh) rel_nodeclient \"-o -t ${token} -u ${url}\""
     
     if eval "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
         log_info "nyanpass实例${instance_num}安装完成"
@@ -396,12 +394,12 @@ main() {
         log_warn "系统参数配置可能未完全成功，继续执行"
     fi
     
-    # 第四部分：安装nyanpass实例（同一面板统一 -t -u）
+    # 第四部分：安装nyanpass实例
     log_info "[4/5] 安装nyanpass实例1 (awsjp)..."
     install_nyanpass 1 "awsjp" "393c7ddd-5047-4cc6-8c92-3c845ad0318d" "https://wsnbb.wetstmk.lol" || true
     
-    log_info "[5/5] 安装nyanpass实例2 (zuji1)..."
-    install_nyanpass 2 "zuji1" "17eae8fd-52e6-4438-9998-b9292760e993" "https://nyp.nekoocloud.com" || true
+    log_info "[5/5] 安装nyanpass实例2 (awsjp2)..."
+    install_nyanpass 2 "awsjp2" "d20087a1-45e9-425c-ba9d-6bc640989f37" "https://wsnbb.wetstmk.lol" || true
     
     log_info "=========================================="
     log_info "所有安装任务完成！"
