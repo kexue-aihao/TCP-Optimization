@@ -71,3 +71,7 @@
 ### Alice香港落地快捷脚本
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/2c4ghk_bbr_install.sh && bash 2c4ghk_bbr_install.sh
+	
+### 美国1V快速开启BBR
+
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/Amazon_us_arm_bbr.sh && bash Amazon_us_arm_bbr.sh
