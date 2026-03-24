@@ -76,5 +76,5 @@
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/Amazon_us_arm_bbr.sh && bash Amazon_us_arm_bbr.sh
 	
-### Linode快速上机（新加坡）
-	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/linode_sg_4C_install.sh && bash linode_sg_4C_install.sh
+### Linode日本6C快速上机
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/linode_sg_4C_install.sh && bash linode_jp_6C_install.sh
