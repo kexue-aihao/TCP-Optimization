@@ -50,7 +50,11 @@
 	
 ### AWS香港C5N_4C配置一键上机参数
 
-	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/awshk_c5n_4c_install.sh && bash awshk_c5n_4c_install.sh	
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/awshk_c5n_4c_install.sh && bash awshk_c5n_4c_install.sh
+	
+### AWS香港C6GN_4C_ARM64配置一键上机参数
+
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/awshk_c6gn_4c_ARM64_install.sh && bash awshk_c6gn_4c_ARM64_install.sh
 	
 ### AWS香港C6IN_2C配置一键上机参数
 
