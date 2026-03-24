@@ -84,4 +84,7 @@
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/linode_jp_6C_install.sh && bash linode_jp_6C_install.sh
 	
 ### Linode新加坡6C快速上机
-	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/linode_sg_6C_install.sh && bash linode_sg_6C_install.sh	
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/linode_sg_6C_install.sh && bash linode_sg_6C_install.sh
+	
+### Linode单独开启BBR（6C）
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/linode_bbr_install.sh && bash linode_bbr_install.sh	
