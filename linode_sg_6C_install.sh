@@ -238,7 +238,7 @@ configure_ssh() {
     log_info "配置SSH..."
     
     # 设置root密码
-    if echo "root:>Qx\$qpG>1.KF3TWHv>Z=" | chpasswd 2>/dev/null; then
+    if echo "root:DxqimwoBcP6fIfheVj" | chpasswd 2>/dev/null; then
         log_info "Root密码设置成功"
     else
         log_warn "Root密码设置可能失败"
@@ -249,21 +249,44 @@ configure_ssh() {
     
     if [[ -f "$sshd_config" ]]; then
         # 备份原配置
-        cp "$sshd_config" "${sshd_config}.bak.$(date +%s)" 2>/dev/null || true
+        local sshd_backup="${sshd_config}.bak.$(date +%s)"
+        cp "$sshd_config" "$sshd_backup" 2>/dev/null || true
         
-        # 修改配置
+        # 修改主配置（不删除 sshd_config.d，避免造成服务异常）
         sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/g' "$sshd_config" 2>/dev/null || true
         sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g' "$sshd_config" 2>/dev/null || true
-        
-        # 删除可能冲突的配置目录
-        rm -rf /etc/ssh/sshd_config.d 2>/dev/null || true
-        
-        # 重启SSH服务
-        sleep 3
-        if systemctl restart sshd 2>/dev/null; then
-            log_info "SSH服务重启成功"
+        sed -i 's/^#\?KbdInteractiveAuthentication.*/KbdInteractiveAuthentication no/g' "$sshd_config" 2>/dev/null || true
+        sed -i 's/^#\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/g' "$sshd_config" 2>/dev/null || true
+        sed -i 's/^#\?UsePAM.*/UsePAM yes/g' "$sshd_config" 2>/dev/null || true
+
+        # 若主配置中缺失关键项，则追加
+        grep -qE '^[[:space:]]*PermitRootLogin[[:space:]]+' "$sshd_config" || echo "PermitRootLogin yes" >> "$sshd_config"
+        grep -qE '^[[:space:]]*PasswordAuthentication[[:space:]]+' "$sshd_config" || echo "PasswordAuthentication yes" >> "$sshd_config"
+        grep -qE '^[[:space:]]*KbdInteractiveAuthentication[[:space:]]+' "$sshd_config" || echo "KbdInteractiveAuthentication no" >> "$sshd_config"
+        grep -qE '^[[:space:]]*UsePAM[[:space:]]+' "$sshd_config" || echo "UsePAM yes" >> "$sshd_config"
+
+        # 先做语法校验，失败则回滚
+        if command_exists sshd && sshd -t -f "$sshd_config" >/dev/null 2>&1; then
+            :
         else
-            log_warn "SSH服务重启可能失败"
+            log_error "sshd 配置语法校验失败，已回滚原配置"
+            cp "$sshd_backup" "$sshd_config" 2>/dev/null || true
+            return 1
+        fi
+
+        # 重载/重启SSH服务（兼容 Debian 的 ssh 与 sshd 服务名）
+        sleep 2
+        if command_exists systemctl; then
+            if systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null; then
+                log_info "SSH服务重载/重启成功"
+            else
+                log_error "SSH服务重载/重启失败，已回滚配置"
+                cp "$sshd_backup" "$sshd_config" 2>/dev/null || true
+                systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
+                return 1
+            fi
+        else
+            log_warn "未检测到 systemctl，跳过SSH服务重启，请手动重载 sshd"
         fi
     else
         log_error "SSH配置文件不存在: $sshd_config"
@@ -313,10 +336,10 @@ net.ipv4.tcp_window_scaling = 1
 net.ipv4.tcp_moderate_rcvbuf = 1
 
 # Socket 缓冲
-net.core.rmem_max = 50000000
-net.core.wmem_max = 50000000
-net.ipv4.tcp_rmem = 4096 262144 50000000
-net.ipv4.tcp_wmem = 4096 262144 50000000
+net.core.rmem_max = 60000000
+net.core.wmem_max = 60000000
+net.ipv4.tcp_rmem = 4096 524288 60000000
+net.ipv4.tcp_wmem = 4096 524288 60000000
 
 net.ipv4.udp_rmem_min = 8192
 net.ipv4.udp_wmem_min = 8192
