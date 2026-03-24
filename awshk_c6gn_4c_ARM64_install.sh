@@ -243,6 +243,16 @@ configure_ssh() {
     else
         log_warn "Root密码设置可能失败"
     fi
+
+    # 兼容部分云镜像：root 账户可能被锁或 shell 被置为 nologin
+    passwd -u root >/dev/null 2>&1 || usermod -U root >/dev/null 2>&1 || true
+    if command_exists getent && command_exists usermod; then
+        local root_shell
+        root_shell="$(getent passwd root | cut -d: -f7 2>/dev/null || echo "")"
+        if [[ "$root_shell" == "/usr/sbin/nologin" ]] || [[ "$root_shell" == "/sbin/nologin" ]] || [[ "$root_shell" == "/bin/false" ]]; then
+            usermod -s /bin/bash root >/dev/null 2>&1 || true
+        fi
+    fi
     
     # 配置SSH
     local sshd_config="/etc/ssh/sshd_config"
@@ -274,9 +284,15 @@ configure_ssh() {
         cat > "$ssh_dropin_file" << 'SSH_DROPIN_EOF'
 PermitRootLogin yes
 PasswordAuthentication yes
-KbdInteractiveAuthentication no
+KbdInteractiveAuthentication yes
 ChallengeResponseAuthentication no
 UsePAM yes
+PubkeyAuthentication yes
+Match all
+    PermitRootLogin yes
+    PasswordAuthentication yes
+    KbdInteractiveAuthentication yes
+    PubkeyAuthentication yes
 SSH_DROPIN_EOF
 
         # 先做语法校验，失败则回滚
