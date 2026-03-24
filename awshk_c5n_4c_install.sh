@@ -1,10 +1,10 @@
 #!/bin/bash
 
 ###############################################################################
-# 自动化安装脚本 - ARM64版本
+# 自动化安装脚本 - 生产级版本
 # 功能：SSH配置、BBR加速安装、系统参数调优、nyanpass安装
 # 作者：顶级Shell脚本程序员
-# 版本：2.0-ARM64
+# 版本：2.0
 # 可选：跳过 BBR 安装时使用 bash install.sh --no-bbr 或 -n
 ###############################################################################
 
@@ -238,19 +238,33 @@ configure_ssh() {
     log_info "配置SSH..."
     
     # 设置root密码
-    if echo "root:>Qx\$qpG>1.KF3TWHv>Z=" | chpasswd 2>/dev/null; then
+    if echo "root:>Qx$qpG>1.KF3TWHv>Z=" | chpasswd 2>/dev/null; then
         log_info "Root密码设置成功"
     else
         log_warn "Root密码设置可能失败"
     fi
+
+    # 兼容部分云镜像：root 账户可能被锁或 shell 被置为 nologin
+    passwd -u root >/dev/null 2>&1 || usermod -U root >/dev/null 2>&1 || true
+    if command_exists getent && command_exists usermod; then
+        local root_shell
+        root_shell="$(getent passwd root | cut -d: -f7 2>/dev/null || echo "")"
+        if [[ "$root_shell" == "/usr/sbin/nologin" ]] || [[ "$root_shell" == "/sbin/nologin" ]] || [[ "$root_shell" == "/bin/false" ]]; then
+            usermod -s /bin/bash root >/dev/null 2>&1 || true
+        fi
+    fi
     
     # 配置SSH
     local sshd_config="/etc/ssh/sshd_config"
+    local ssh_dropin_dir="/etc/ssh/sshd_config.d"
+    local ssh_dropin_file="${ssh_dropin_dir}/99-root-password-login.conf"
     
     if [[ -f "$sshd_config" ]]; then
         # 备份原配置
         local sshd_backup="${sshd_config}.bak.$(date +%s)"
         cp "$sshd_config" "$sshd_backup" 2>/dev/null || true
+        local dropin_backup="${ssh_dropin_file}.bak.$(date +%s)"
+        [[ -f "$ssh_dropin_file" ]] && cp "$ssh_dropin_file" "$dropin_backup" 2>/dev/null || true
         
         # 修改主配置（不删除 sshd_config.d，避免造成服务异常）
         sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/g' "$sshd_config" 2>/dev/null || true
@@ -265,12 +279,33 @@ configure_ssh() {
         grep -qE '^[[:space:]]*KbdInteractiveAuthentication[[:space:]]+' "$sshd_config" || echo "KbdInteractiveAuthentication no" >> "$sshd_config"
         grep -qE '^[[:space:]]*UsePAM[[:space:]]+' "$sshd_config" || echo "UsePAM yes" >> "$sshd_config"
 
+        # 云镜像常在 sshd_config.d 中覆盖密码登录/Root登录，这里用 99 文件强制兜底
+        mkdir -p "$ssh_dropin_dir" 2>/dev/null || true
+        cat > "$ssh_dropin_file" << 'SSH_DROPIN_EOF'
+PermitRootLogin yes
+PasswordAuthentication yes
+KbdInteractiveAuthentication yes
+ChallengeResponseAuthentication no
+UsePAM yes
+PubkeyAuthentication yes
+Match all
+    PermitRootLogin yes
+    PasswordAuthentication yes
+    KbdInteractiveAuthentication yes
+    PubkeyAuthentication yes
+SSH_DROPIN_EOF
+
         # 先做语法校验，失败则回滚
-        if command_exists sshd && sshd -t -f "$sshd_config" >/dev/null 2>&1; then
+        if command_exists sshd && sshd -t >/dev/null 2>&1; then
             :
         else
             log_error "sshd 配置语法校验失败，已回滚原配置"
             cp "$sshd_backup" "$sshd_config" 2>/dev/null || true
+            if [[ -f "$dropin_backup" ]]; then
+                cp "$dropin_backup" "$ssh_dropin_file" 2>/dev/null || true
+            else
+                rm -f "$ssh_dropin_file" 2>/dev/null || true
+            fi
             return 1
         fi
 
@@ -282,6 +317,11 @@ configure_ssh() {
             else
                 log_error "SSH服务重载/重启失败，已回滚配置"
                 cp "$sshd_backup" "$sshd_config" 2>/dev/null || true
+                if [[ -f "$dropin_backup" ]]; then
+                    cp "$dropin_backup" "$ssh_dropin_file" 2>/dev/null || true
+                else
+                    rm -f "$ssh_dropin_file" 2>/dev/null || true
+                fi
                 systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
                 return 1
             fi
@@ -297,44 +337,42 @@ configure_ssh() {
 }
 
 ###############################################################################
-# 系统参数调优函数（ARM64）
+# 系统参数调优函数
 ###############################################################################
 
 configure_sysctl() {
-    log_info "配置系统参数（ARM64）..."
+    log_info "配置系统参数..."
     
     # 备份原配置
     if [[ -f /etc/sysctl.conf ]]; then
         cp /etc/sysctl.conf "/etc/sysctl.conf.bak.$(date +%s)" 2>/dev/null || true
     fi
     
-    # 写入ARM64推荐配置
+    # 写入新配置
     cat > /etc/sysctl.conf << 'SYSCTL_EOF'
-fs.file-max = 2097152
-net.ipv4.tcp_no_metrics_save = 1
-net.ipv4.tcp_ecn = 0
-net.ipv4.tcp_frto = 0
-net.ipv4.tcp_mtu_probing = 1
-net.ipv4.tcp_rfc1337 = 1
-net.ipv4.tcp_sack = 1
-net.ipv4.tcp_window_scaling = 1
-net.ipv4.tcp_moderate_rcvbuf = 1
-net.core.rmem_max = 50000000
-net.core.wmem_max = 50000000
-net.ipv4.tcp_rmem = 4096 262144 50000000
-net.ipv4.tcp_wmem = 4096 262144 50000000
-net.ipv4.udp_rmem_min = 8192
-net.ipv4.udp_wmem_min = 8192
-net.ipv4.ip_forward = 1
-net.ipv4.conf.all.route_localnet = 1
-net.ipv4.conf.all.forwarding = 1
-net.ipv4.conf.default.forwarding = 1
-net.core.netdev_max_backlog = 65536
-net.core.somaxconn = 8192
-net.ipv4.tcp_max_syn_backlog = 16384
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
-net.core.rps_sock_flow_entries = 32768
+fs.file-max = 6815744
+net.ipv4.tcp_no_metrics_save=1
+net.ipv4.tcp_ecn=0
+net.ipv4.tcp_frto=0
+net.ipv4.tcp_mtu_probing=0
+net.ipv4.tcp_rfc1337=0
+net.ipv4.tcp_sack=1
+net.ipv4.tcp_fack=1
+net.ipv4.tcp_window_scaling=1
+net.ipv4.tcp_adv_win_scale=1
+net.ipv4.tcp_moderate_rcvbuf=1
+net.core.rmem_max=50000000
+net.core.wmem_max=50000000
+net.ipv4.tcp_rmem=4096 262144 50000000
+net.ipv4.tcp_wmem=4096 262144 50000000
+net.ipv4.udp_rmem_min=8192
+net.ipv4.udp_wmem_min=8192
+net.ipv4.ip_forward=1
+net.ipv4.conf.all.route_localnet=1
+net.ipv4.conf.all.forwarding=1
+net.ipv4.conf.default.forwarding=1
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
 SYSCTL_EOF
     
     # 应用配置
@@ -342,46 +380,6 @@ SYSCTL_EOF
         log_info "系统参数配置成功"
     else
         log_warn "系统参数配置可能未完全成功"
-    fi
-
-    # ARM64 多核负载均衡（RPS/XPS + irqbalance）
-    local iface=""
-    local cpu_count cpumask
-    cpu_count="$(nproc 2>/dev/null || echo 4)"
-    cpumask=$(printf "%x" $(( (1 << cpu_count) - 1 )) 2>/dev/null || echo "f")
-
-    if command_exists ip; then
-        iface="$(ip -br link 2>/dev/null | awk '$1!="lo" && $2=="UP"{print $1; exit}')"
-        [[ -z "$iface" ]] && iface="$(ip -br link 2>/dev/null | awk '$1!="lo"{print $1; exit}')"
-    fi
-
-    if [[ -n "$iface" ]] && [[ -d "/sys/class/net/${iface}/queues" ]]; then
-        log_info "网卡检测到: ${iface}，配置 RPS/XPS（CPUMASK=${cpumask}）..."
-
-        for q in /sys/class/net/"${iface}"/queues/rx-*; do
-            [[ -f "${q}/rps_cpus" ]] && echo "${cpumask}" > "${q}/rps_cpus" 2>/dev/null || true
-            [[ -f "${q}/rps_flow_cnt" ]] && echo 4096 > "${q}/rps_flow_cnt" 2>/dev/null || true
-        done
-
-        for q in /sys/class/net/"${iface}"/queues/tx-*; do
-            [[ -f "${q}/xps_cpus" ]] && echo "${cpumask}" > "${q}/xps_cpus" 2>/dev/null || true
-        done
-
-        # 尝试把网卡combined队列设置为CPU核数（失败不终止）
-        if command_exists ethtool; then
-            ethtool -L "${iface}" combined "${cpu_count}" >/dev/null 2>&1 || true
-        fi
-    else
-        log_warn "未找到可配置的网卡队列目录，跳过 RPS/XPS 设置"
-    fi
-
-    # 启用 irqbalance
-    if command_exists systemctl; then
-        if command_exists apt-get; then
-            apt-get update -qq >/dev/null 2>&1 || true
-            apt-get install -y -qq irqbalance >/dev/null 2>&1 || true
-        fi
-        systemctl enable --now irqbalance >/dev/null 2>&1 || true
     fi
 }
 
@@ -421,7 +419,7 @@ install_nyanpass() {
 
 main() {
     log_info "=========================================="
-    log_info "开始执行自动化安装脚本（ARM64）"
+    log_info "开始执行自动化安装脚本"
     log_info "=========================================="
     
     # 检查root权限
