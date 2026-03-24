@@ -246,11 +246,15 @@ configure_ssh() {
     
     # 配置SSH
     local sshd_config="/etc/ssh/sshd_config"
+    local ssh_dropin_dir="/etc/ssh/sshd_config.d"
+    local ssh_dropin_file="${ssh_dropin_dir}/99-root-password-login.conf"
     
     if [[ -f "$sshd_config" ]]; then
         # 备份原配置
         local sshd_backup="${sshd_config}.bak.$(date +%s)"
         cp "$sshd_config" "$sshd_backup" 2>/dev/null || true
+        local dropin_backup="${ssh_dropin_file}.bak.$(date +%s)"
+        [[ -f "$ssh_dropin_file" ]] && cp "$ssh_dropin_file" "$dropin_backup" 2>/dev/null || true
         
         # 修改主配置（不删除 sshd_config.d，避免造成服务异常）
         sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/g' "$sshd_config" 2>/dev/null || true
@@ -265,12 +269,27 @@ configure_ssh() {
         grep -qE '^[[:space:]]*KbdInteractiveAuthentication[[:space:]]+' "$sshd_config" || echo "KbdInteractiveAuthentication no" >> "$sshd_config"
         grep -qE '^[[:space:]]*UsePAM[[:space:]]+' "$sshd_config" || echo "UsePAM yes" >> "$sshd_config"
 
+        # 云镜像常在 sshd_config.d 中覆盖密码登录/Root登录，这里用 99 文件强制兜底
+        mkdir -p "$ssh_dropin_dir" 2>/dev/null || true
+        cat > "$ssh_dropin_file" << 'SSH_DROPIN_EOF'
+PermitRootLogin yes
+PasswordAuthentication yes
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+UsePAM yes
+SSH_DROPIN_EOF
+
         # 先做语法校验，失败则回滚
-        if command_exists sshd && sshd -t -f "$sshd_config" >/dev/null 2>&1; then
+        if command_exists sshd && sshd -t >/dev/null 2>&1; then
             :
         else
             log_error "sshd 配置语法校验失败，已回滚原配置"
             cp "$sshd_backup" "$sshd_config" 2>/dev/null || true
+            if [[ -f "$dropin_backup" ]]; then
+                cp "$dropin_backup" "$ssh_dropin_file" 2>/dev/null || true
+            else
+                rm -f "$ssh_dropin_file" 2>/dev/null || true
+            fi
             return 1
         fi
 
@@ -282,6 +301,11 @@ configure_ssh() {
             else
                 log_error "SSH服务重载/重启失败，已回滚配置"
                 cp "$sshd_backup" "$sshd_config" 2>/dev/null || true
+                if [[ -f "$dropin_backup" ]]; then
+                    cp "$dropin_backup" "$ssh_dropin_file" 2>/dev/null || true
+                else
+                    rm -f "$ssh_dropin_file" 2>/dev/null || true
+                fi
                 systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
                 return 1
             fi
