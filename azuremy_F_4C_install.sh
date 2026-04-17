@@ -171,10 +171,10 @@ net.ipv4.tcp_max_syn_backlog = 16384
 net.core.netdev_max_backlog = 16384
 net.ipv4.ip_local_port_range = 1000 65535
 net.ipv4.tcp_syncookies = 1
-net.core.rmem_max = 50000000
-net.core.wmem_max = 50000000
-net.ipv4.tcp_rmem = 8192 262144 50000000
-net.ipv4.tcp_wmem = 8192 262144 50000000
+net.core.rmem_max = 100000000
+net.core.wmem_max = 100000000
+net.ipv4.tcp_rmem = 8192 65536 100000000
+net.ipv4.tcp_wmem = 8192 65536 100000000
 net.ipv4.udp_rmem_min = 8192
 net.ipv4.udp_wmem_min = 8192
 net.ipv4.ip_forward = 1
@@ -252,12 +252,13 @@ EOF
   i "已设置 ${svc}.service CPUAffinity=${cpu_list} (cores=${cores})"
 }
 
+# $1=systemd 服务名  $2=传给 rel_nodeclient 的参数串，如: -t <uuid> -u <url>
 install_nyanpass(){
-  local service_name="mala"
+  local service_name="${1:?缺少服务名}"
+  local rel_args="${2:?缺少 rel_nodeclient 参数}"
   local installer_url="https://dl.nyafw.com/download/nyanpass-install.sh"
   local nyan_log="/tmp/nyanpass-install-${service_name}-$(date +%s).log"
   local installer_file="/tmp/nyanpass-install-${service_name}.sh"
-  local cmd_run
   i "安装nyanpass实例(${service_name})..."
 
   # 先下载安装脚本，避免 process substitution 卡住且便于排障
@@ -269,10 +270,8 @@ install_nyanpass(){
   fi
   chmod +x "${installer_file}" >/dev/null 2>&1 || true
 
-  # 只走可控的交互输入路径，且强制超时，避免无限卡住
-  cmd_run="printf '${service_name}\nn\ny\n' | timeout ${TIMEOUT_NYANPASS} bash \"${installer_file}\" rel_nodeclient \"-t 90441e3d-ddb4-4994-b18f-06a0c596cf54 -u https://wsnbb.wetstmk.lol\""
-
-  if eval "$cmd_run" >>"$nyan_log" 2>&1; then
+  # 可控交互输入 + 强制超时，等价于: bash <(curl...) rel_nodeclient "<rel_args>"
+  if printf '%s\n' "$service_name" n y | timeout "${TIMEOUT_NYANPASS}" bash "$installer_file" rel_nodeclient "$rel_args" >>"$nyan_log" 2>&1; then
     i "实例(${service_name})完成"
     set_service_cpu_affinity "$service_name"
     log_append "[INFO] nyanpass日志: ${nyan_log}"
@@ -289,12 +288,13 @@ main(){
   prepare_log
   root_check "$@"
   skip=false; [[ "${1:-}" == "--no-bbr" || "${1:-}" == "-n" ]] && skip=true
-  i "[1/6] SSH"; configure_ssh || w "SSH步骤异常"
-  if [[ "$skip" == false ]]; then i "[2/6] BBR"; install_bbr || true; sleep 2; else i "[2/6] 跳过BBR"; fi
-  i "[3/6] sysctl"; configure_sysctl || w "sysctl步骤异常"
-  i "[4/6] iperf3"; install_iperf3 || w "iperf3步骤异常"
-  i "[5/6] btop"; install_btop || w "btop步骤异常"
-  i "[6/6] nyanpass(mala)"; install_nyanpass
+  i "[1/7] SSH"; configure_ssh || w "SSH步骤异常"
+  if [[ "$skip" == false ]]; then i "[2/7] BBR"; install_bbr || true; sleep 2; else i "[2/7] 跳过BBR"; fi
+  i "[3/7] sysctl"; configure_sysctl || w "sysctl步骤异常"
+  i "[4/7] iperf3"; install_iperf3 || w "iperf3步骤异常"
+  i "[5/7] btop"; install_btop || w "btop步骤异常"
+  i "[6/7] nyanpass(mala)"; install_nyanpass mala "-t 90441e3d-ddb4-4994-b18f-06a0c596cf54 -u https://wsnbb.wetstmk.lol" || w "nyanpass(mala)步骤异常"
+  i "[7/7] nyanpass(641)"; install_nyanpass 641 "-t 35f3f0c6-f2e3-45ee-8179-b54dc4e91e9d -u https://ny.4444441.xyz" || w "nyanpass(641)步骤异常"
   i "全部任务完成"
 }
 main "$@"
