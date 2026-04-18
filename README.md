@@ -66,7 +66,11 @@
 	
 ### Aklie-HK快捷调参脚本
 
-	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/1c1g_Aklie_hk_bbr.sh && bash 1c1g_Aklie_hk_bbr.sh	
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/1c1g_Aklie_hk_bbr.sh && bash 1c1g_Aklie_hk_bbr.sh
+	
+### Aklie-番茄特供日本落地1C1G快捷调参脚本
+
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/1c1g_Aklie_jp_bbr.sh && bash 1c1g_Aklie_jp_bbr.sh	
 	
 ### AWS_EC2香港直连补机快捷脚本	
 	
