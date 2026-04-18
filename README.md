@@ -64,7 +64,7 @@
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/awssg_c5n_4c_install.sh && bash awssg_c5n_4c_install.sh	
 	
-### Aklie-HK快捷调参脚本
+### Aklie-Mini香港落地1C1G快捷调参脚本
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/1c1g_Aklie_hk_bbr.sh && bash 1c1g_Aklie_hk_bbr.sh
 	
