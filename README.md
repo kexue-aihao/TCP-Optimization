@@ -68,6 +68,10 @@
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/1c1g_Aklie_hk_bbr.sh && bash 1c1g_Aklie_hk_bbr.sh
 	
+### Hytron香港落地4C4G快捷调参脚本
+
+	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/4c4g_Hytron_hk_bbr.sh && bash 4c4g_Hytron_hk_bbr.sh
+	
 ### Aklie-番茄特供日本落地1C1G快捷调参脚本
 
 	wget -N https://raw.githubusercontent.com/kexue-aihao/TCP-Optimization/refs/heads/master/1c1g_Aklie_jp_bbr.sh && bash 1c1g_Aklie_jp_bbr.sh	
