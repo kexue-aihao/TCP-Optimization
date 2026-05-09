@@ -1,9 +1,9 @@
 #!/bin/bash
 
 ###############################################################################
-# Linode SG 6C - BBR/SSH/sysctl 专用脚本（无 nyanpass）
-# 功能：SSH配置、BBR加速安装、系统参数调优
-# 可选：跳过 BBR 时使用 bash linode_sg_6C_bbr_install.sh --no-bbr 或 -n
+# BBR+FQ 配置脚本
+# 功能：开启BBR+FQ加速并配置系统参数
+# 版本：1.0
 ###############################################################################
 
 set -uo pipefail  # 严格模式：未定义变量报错，管道失败报错（不使用-e，允许某些步骤失败后继续）
@@ -15,8 +15,6 @@ set -uo pipefail  # 严格模式：未定义变量报错，管道失败报错（
 readonly SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly LOG_FILE="/tmp/${SCRIPT_NAME}.log"
-readonly BBR_LOG="/tmp/bbr_install.log"
-readonly TIMEOUT_BBR=600  # BBR安装超时时间（10分钟）
 
 # 颜色定义
 readonly RED='\033[0;31m'
@@ -60,10 +58,6 @@ cleanup() {
     for func in "${CLEANUP_FUNCTIONS[@]}"; do
         $func || true
     done
-    
-    # 清理残留进程（如果需要）
-    pkill -9 -f "kejilio" 2>/dev/null || true
-    pkill -9 -f "kejilion" 2>/dev/null || true
 }
 
 # 注册清理函数
@@ -85,23 +79,6 @@ check_root() {
         log_error "此脚本需要root权限运行"
         exit 1
     fi
-}
-
-# 等待进程结束
-wait_for_process() {
-    local pid=$1
-    local timeout=${2:-60}
-    local count=0
-    
-    while kill -0 "$pid" 2>/dev/null && [[ $count -lt $timeout ]]; do
-        sleep 1
-        ((count++))
-    done
-    
-    if kill -0 "$pid" 2>/dev/null; then
-        return 1  # 超时
-    fi
-    return 0
 }
 
 ###############################################################################
@@ -150,43 +127,6 @@ install_bbr() {
         log_info "BBR模块已加载"
     fi
     
-    # 第二步：配置sysctl参数
-    log_info "配置BBR和FQ参数..."
-    
-    # 备份原sysctl配置（如果存在）
-    if [[ -f /etc/sysctl.conf ]]; then
-        cp /etc/sysctl.conf "/etc/sysctl.conf.bak.$(date +%s)" 2>/dev/null || true
-    fi
-    
-    # 读取现有sysctl配置
-    local sysctl_content=""
-    if [[ -f /etc/sysctl.conf ]]; then
-        sysctl_content=$(cat /etc/sysctl.conf)
-    fi
-    
-    # 移除旧的BBR/FQ配置（如果存在）
-    sysctl_content=$(echo "$sysctl_content" | grep -v "net.core.default_qdisc" | grep -v "net.ipv4.tcp_congestion_control")
-    
-    # 添加BBR和FQ配置
-    {
-        echo "$sysctl_content"
-        echo ""
-        echo "# BBR and FQ configuration - Added by install.sh"
-        echo "net.core.default_qdisc = fq"
-        echo "net.ipv4.tcp_congestion_control = bbr"
-    } > /etc/sysctl.conf
-    
-    # 第三步：立即应用配置
-    log_info "应用BBR和FQ配置..."
-    if sysctl -p >/dev/null 2>&1; then
-        log_info "sysctl配置应用成功"
-    else
-        log_warn "sysctl配置应用可能失败"
-    fi
-    
-    # 应用系统级配置
-    sysctl --system >/dev/null 2>&1 || true
-    
     # 第四步：验证BBR是否启用
     log_info "验证BBR配置..."
     sleep 2
@@ -222,75 +162,9 @@ install_bbr() {
     else
         log_warn "BBR配置可能未完全生效"
         log_info "当前配置: cc=$current_cc, qdisc=$current_qdisc"
-        log_info "可能需要重启系统后生效"
-        return 1
+        log_info "配置将在sysctl配置应用后生效"
+        return 0  # 继续执行，因为sysctl配置会设置BBR
     fi
-}
-
-###############################################################################
-# SSH配置函数
-###############################################################################
-
-configure_ssh() {
-    log_info "配置SSH..."
-    
-    # 设置root密码
-    if echo "root:DxqimwoBcP6fIfheVj" | chpasswd 2>/dev/null; then
-        log_info "Root密码设置成功"
-    else
-        log_warn "Root密码设置可能失败"
-    fi
-    
-    # 配置SSH
-    local sshd_config="/etc/ssh/sshd_config"
-    
-    if [[ -f "$sshd_config" ]]; then
-        # 备份原配置
-        local sshd_backup="${sshd_config}.bak.$(date +%s)"
-        cp "$sshd_config" "$sshd_backup" 2>/dev/null || true
-        
-        # 修改主配置（不删除 sshd_config.d，避免造成服务异常）
-        sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/g' "$sshd_config" 2>/dev/null || true
-        sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g' "$sshd_config" 2>/dev/null || true
-        sed -i 's/^#\?KbdInteractiveAuthentication.*/KbdInteractiveAuthentication no/g' "$sshd_config" 2>/dev/null || true
-        sed -i 's/^#\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/g' "$sshd_config" 2>/dev/null || true
-        sed -i 's/^#\?UsePAM.*/UsePAM yes/g' "$sshd_config" 2>/dev/null || true
-
-        # 若主配置中缺失关键项，则追加
-        grep -qE '^[[:space:]]*PermitRootLogin[[:space:]]+' "$sshd_config" || echo "PermitRootLogin yes" >> "$sshd_config"
-        grep -qE '^[[:space:]]*PasswordAuthentication[[:space:]]+' "$sshd_config" || echo "PasswordAuthentication yes" >> "$sshd_config"
-        grep -qE '^[[:space:]]*KbdInteractiveAuthentication[[:space:]]+' "$sshd_config" || echo "KbdInteractiveAuthentication no" >> "$sshd_config"
-        grep -qE '^[[:space:]]*UsePAM[[:space:]]+' "$sshd_config" || echo "UsePAM yes" >> "$sshd_config"
-
-        # 先做语法校验，失败则回滚
-        if command_exists sshd && sshd -t -f "$sshd_config" >/dev/null 2>&1; then
-            :
-        else
-            log_error "sshd 配置语法校验失败，已回滚原配置"
-            cp "$sshd_backup" "$sshd_config" 2>/dev/null || true
-            return 1
-        fi
-
-        # 重载/重启SSH服务（兼容 Debian 的 ssh 与 sshd 服务名）
-        sleep 2
-        if command_exists systemctl; then
-            if systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null; then
-                log_info "SSH服务重载/重启成功"
-            else
-                log_error "SSH服务重载/重启失败，已回滚配置"
-                cp "$sshd_backup" "$sshd_config" 2>/dev/null || true
-                systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
-                return 1
-            fi
-        else
-            log_warn "未检测到 systemctl，跳过SSH服务重启，请手动重载 sshd"
-        fi
-    else
-        log_error "SSH配置文件不存在: $sshd_config"
-        return 1
-    fi
-    
-    log_info "SSH配置完成"
 }
 
 ###############################################################################
@@ -303,93 +177,66 @@ configure_sysctl() {
     # 备份原配置
     if [[ -f /etc/sysctl.conf ]]; then
         cp /etc/sysctl.conf "/etc/sysctl.conf.bak.$(date +%s)" 2>/dev/null || true
+        log_info "已备份原配置到: /etc/sysctl.conf.bak.$(date +%s)"
     fi
     
-    # 写入新配置：Linode SG 4C / AMD 转发场景的均衡稳态参数
-    cat > /etc/sysctl.conf << 'SYSCTL_EOF'
-fs.file-max = 2097152
-
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
-
-net.ipv4.ip_forward = 1
-net.ipv4.conf.all.forwarding = 1
-net.ipv4.conf.default.forwarding = 1
-net.ipv4.conf.all.route_localnet = 1
-
-# 连接队列/转发拥塞缓冲（避免小核抖动）
-net.core.netdev_max_backlog = 65536
-net.core.somaxconn = 8192
-net.ipv4.tcp_max_syn_backlog = 16384
-
-# TCP 行为（保守、稳态）
+    # 写入新配置
+    log_info "写入sysctl配置..."
+    cat > /etc/sysctl.conf << 'EOF'
+fs.file-max = 6815744
 net.ipv4.tcp_no_metrics_save = 1
 net.ipv4.tcp_ecn = 0
 net.ipv4.tcp_frto = 0
-net.ipv4.tcp_mtu_probing = 1
-net.ipv4.tcp_rfc1337 = 1
+net.ipv4.tcp_mtu_probing = 0
+net.ipv4.tcp_rfc1337 = 0
 net.ipv4.tcp_sack = 1
+net.ipv4.tcp_fack = 1
 net.ipv4.tcp_window_scaling = 1
+net.ipv4.tcp_adv_win_scale = 1
 net.ipv4.tcp_moderate_rcvbuf = 1
-
-# Socket 缓冲
+net.core.somaxconn = 16384
+net.ipv4.tcp_max_syn_backlog = 16384
+net.core.netdev_max_backlog = 16384
+net.ipv4.ip_local_port_range = 1000 65535
+net.ipv4.tcp_syncookies = 1
 net.core.rmem_max = 60000000
 net.core.wmem_max = 60000000
-net.ipv4.tcp_rmem = 4096 524288 60000000
-net.ipv4.tcp_wmem = 4096 524288 60000000
-
+net.ipv4.tcp_rmem = 8192 65536 60000000
+net.ipv4.tcp_wmem = 8192 65536 60000000
 net.ipv4.udp_rmem_min = 8192
 net.ipv4.udp_wmem_min = 8192
-SYSCTL_EOF
+net.ipv4.ip_forward = 1
+net.ipv4.conf.all.route_localnet = 1
+net.ipv4.conf.all.forwarding = 1
+net.ipv4.conf.default.forwarding = 1
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+EOF
     
     # 应用配置
-    if sysctl -p >/dev/null 2>&1 && sysctl --system >/dev/null 2>&1; then
-        log_info "系统参数配置成功"
+    log_info "应用sysctl配置..."
+    if sysctl -p && sysctl --system; then
+        log_info "✓ 系统参数配置成功"
+        
+        # 验证配置
+        sleep 2
+        local current_cc current_qdisc
+        current_cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "unknown")
+        current_qdisc=$(sysctl -n net.core.default_qdisc 2>/dev/null || echo "unknown")
+        
+        log_info "当前拥塞控制算法: $current_cc"
+        log_info "当前队列算法: $current_qdisc"
+        
+        if [[ "$current_cc" == "bbr" ]] && [[ "$current_qdisc" == "fq" ]]; then
+            log_info "✓ BBR+FQ已成功启用！"
+        else
+            log_warn "BBR+FQ可能未完全生效，可能需要重启系统"
+        fi
+        
+        return 0
     else
         log_warn "系统参数配置可能未完全成功"
-    fi
-
-    # 额外：AMD 多核负载均衡（RPS/XPS + irqbalance）
-    # 目标：把接收/发送软中断与协议栈处理分摊到更多 CPU，避免单核打满
-    local IFACE=""
-    local CPUMASK="f"   # 4核(0-3) => 0b1111
-    
-    if command_exists ip; then
-        IFACE="$(ip -br link 2>/dev/null | awk '$1!="lo"{print $1; exit}')"
-    fi
-    
-    if [[ -n "$IFACE" ]] && [[ -d "/sys/class/net/${IFACE}/queues" ]]; then
-        log_info "网卡检测到: ${IFACE}，开始配置 RPS/XPS（CPUMASK=${CPUMASK}）..."
-        
-        # RPS 总表项
-        sysctl -w net.core.rps_sock_flow_entries=32768 >/dev/null 2>&1 || true
-        
-        # RX 队列：rps_cpus / rps_flow_cnt
-        for q in /sys/class/net/"${IFACE}"/queues/rx-*; do
-            [[ -f "${q}/rps_cpus" ]] && echo "${CPUMASK}" > "${q}/rps_cpus" 2>/dev/null || true
-            [[ -f "${q}/rps_flow_cnt" ]] && echo 4096 > "${q}/rps_flow_cnt" 2>/dev/null || true
-        done
-        
-        # TX 队列：xps_cpus
-        for q in /sys/class/net/"${IFACE}"/queues/tx-*; do
-            [[ -f "${q}/xps_cpus" ]] && echo "${CPUMASK}" > "${q}/xps_cpus" 2>/dev/null || true
-        done
-        
-        # 可选：尝试增加网卡队列数（受驱动限制，失败不影响脚本）
-        if command_exists ethtool; then
-            ethtool -L "${IFACE}" combined 4 >/dev/null 2>&1 || true
-        fi
-    else
-        log_warn "未找到可配置的网卡队列目录，跳过 RPS/XPS 设置"
-    fi
-
-    # irqbalance：把中断分散到多核
-    if command_exists systemctl; then
-        if command_exists apt-get; then
-            apt-get update -qq >/dev/null 2>&1 || true
-            apt-get install -y -qq irqbalance >/dev/null 2>&1 || true
-        fi
-        systemctl enable --now irqbalance >/dev/null 2>&1 || true
+        return 1
     fi
 }
 
@@ -399,54 +246,34 @@ SYSCTL_EOF
 
 main() {
     log_info "=========================================="
-    log_info "开始执行 BBR/SSH/sysctl 安装脚本（无 nyanpass）"
+    log_info "开始执行BBR+FQ配置脚本"
     log_info "=========================================="
     
     # 检查root权限
     check_root
     
-    # 解析参数
-    local skip_bbr=false
-    if [[ "${1:-}" == "--no-bbr" ]] || [[ "${1:-}" == "-n" ]]; then
-        skip_bbr=true
-        log_info "跳过BBR安装模式"
-    fi
-    
-    # 第一部分：SSH配置
-    log_info "[1/3] 配置SSH..."
-    if configure_ssh; then
-        log_info "SSH配置成功"
+    # 第一部分：BBR安装和配置
+    log_info "[1/2] 配置BBR+FQ..."
+    if install_bbr; then
+        log_info "BBR配置检查完成"
     else
-        log_warn "SSH配置可能未完全成功，继续执行"
+        log_warn "BBR配置检查可能未完全成功，继续执行"
     fi
     
-    # 第二部分：BBR安装
-    if [[ "$skip_bbr" == false ]]; then
-        log_info "[2/3] 安装BBR加速..."
-        if install_bbr; then
-            log_info "BBR安装成功"
-        else
-            log_warn "BBR安装可能未完全成功，继续执行后续步骤"
-        fi
-        
-        # 等待系统稳定
-        log_info "等待系统稳定（5秒）..."
-        sleep 5
-    else
-        log_info "[2/3] BBR加速安装..."
-        log_info "已跳过BBR安装"
-    fi
+    # 等待系统稳定
+    log_info "等待系统稳定（2秒）..."
+    sleep 2
     
-    # 第三部分：系统参数调优
-    log_info "[3/3] 配置系统参数..."
+    # 第二部分：系统参数调优
+    log_info "[2/2] 配置系统参数..."
     if configure_sysctl; then
         log_info "系统参数配置成功"
     else
-        log_warn "系统参数配置可能未完全成功，继续执行"
+        log_warn "系统参数配置可能未完全成功"
     fi
     
     log_info "=========================================="
-    log_info "所有任务完成！"
+    log_info "所有配置任务完成！"
     log_info "=========================================="
 }
 
