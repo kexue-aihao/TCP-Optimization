@@ -197,7 +197,6 @@ net.ipv4.tcp_moderate_rcvbuf = 1
 net.core.somaxconn = 16384
 net.ipv4.tcp_max_syn_backlog = 16384
 net.core.netdev_max_backlog = 16384
-net.ipv4.ip_local_port_range = 1000 65535
 net.ipv4.tcp_syncookies = 1
 net.core.rmem_max = 60000000
 net.core.wmem_max = 60000000
