@@ -210,6 +210,8 @@ net.ipv4.conf.all.forwarding = 1
 net.ipv4.conf.default.forwarding = 1
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
+net.ipv6.conf.all.forwarding = 1
+net.ipv6.conf.default.forwarding = 1
 EOF
     
     # 应用配置
