@@ -727,7 +727,7 @@ main(){
 
   i "[5/8] iperf3";install_iperf3 || w "iperf3步骤异常"
   i "[6/8] btop";install_btop || w "btop步骤异常"
-  i "[7/8] nyanpass(2)";install_nyanpass 1 "2" "fd52e33f-6455-412b-8a96-a5e8f7292b11" "https://alpha.argoa.org" no_o
+  i "[7/8] nyanpass(2)";install_nyanpass 1 "2" "5e0d5cbb-4850-4b51-93e9-6d62ae317325" "https://alpha.argoa.org" no_o
   i "[8/8] ICMP";configure_icmp || w "ICMP步骤异常"
 
   summary
